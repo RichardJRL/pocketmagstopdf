@@ -52,9 +52,13 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 
 # The pattern of the URL path for a magazine
+# Original Gist pattern
 # URL_PATH_PATTERN = re.compile(r'(?P<prefix>^[a-f0-9\-/]*/high/)[0-9]{4}.jpg')
+# One of my updated patterns
+URL_PATH_PATTERN = re.compile(r'(?P<prefix>/mcmags/[a-f0-9\-]*/[a-f0-9\-]*/extralow/)[0-9]{4}.jpg')
+# One of my updated patterns
 URL_PATH_PATTERN = re.compile(r'(?P<prefix>^/mcmags/[a-f0-9\-/]*/mid/)[0-9]{4}.jpg')
-# e.g. https://mcdatastore.blob.core.windows.net/mcmags/f3786b15-4b19-456e-9b58-2af137a35bcd/9e3ee986-08f3-4679-bf58-ebe1151852e3/low/0025.jpg
+# Example URL: https://mcdatastore.blob.core.windows.net/mcmags/f3786b15-4b19-456e-9b58-2af137a35bcd/9e3ee986-08f3-4679-bf58-ebe1151852e3/low/0025.jpg
 
 @contextmanager
 def saving(thing):
@@ -69,6 +73,9 @@ def main():
     pdf_fn, url = (opts[k] for k in ('<pdf>', '<url>'))
     url = urlparse(url)
     dpi = float(opts['--dpi'])
+    print('URL is: {}'.format(url))
+    print('File is: {}'.format(pdf_fn))
+    print('DPI is {}'.format(dpi))
 
     m = URL_PATH_PATTERN.match(url.path)
     if not m:
