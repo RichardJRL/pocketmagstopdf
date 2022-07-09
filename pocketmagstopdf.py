@@ -55,10 +55,32 @@ from reportlab.lib.units import inch
 # Original Gist pattern
 # URL_PATH_PATTERN = re.compile(r'(?P<prefix>^[a-f0-9\-/]*/high/)[0-9]{4}.jpg')
 # One of my updated patterns
-URL_PATH_PATTERN = re.compile(r'(?P<prefix>/mcmags/[a-f0-9\-]*/[a-f0-9\-]*/extralow/)[0-9]{4}.jpg')
-# One of my updated patterns
+# URL_PATH_PATTERN = re.compile(r'(?P<prefix>/mcmags/[a-f0-9\-]*/[a-f0-9\-]*/extralow/)[0-9]{4}.jpg')
+# One of my updated patterns, confirmed working 8 July 2022
 URL_PATH_PATTERN = re.compile(r'(?P<prefix>^/mcmags/[a-f0-9\-/]*/mid/)[0-9]{4}.jpg')
-# Example URL: https://mcdatastore.blob.core.windows.net/mcmags/f3786b15-4b19-456e-9b58-2af137a35bcd/9e3ee986-08f3-4679-bf58-ebe1151852e3/low/0025.jpg
+
+# Example URLs sampled 8 July 2022, deliberately using an advert from a magazine:
+# https://mcdatastore.blob.core.windows.net/mcmags/f3786b15-4b19-456e-9b58-2af137a35bcd/ba9c5bcb-cf96-4215-a2f5-841ddb4a119c/extralow/0046.jpg
+# https://mcdatastore.blob.core.windows.net/mcmags/f3786b15-4b19-456e-9b58-2af137a35bcd/ba9c5bcb-cf96-4215-a2f5-841ddb4a119c/low/0046.jpg
+# https://mcdatastore.blob.core.windows.net/mcmags/f3786b15-4b19-456e-9b58-2af137a35bcd/ba9c5bcb-cf96-4215-a2f5-841ddb4a119c/mid/0046.jpg
+# https://mcdatastore.blob.core.windows.net/mcmags/f3786b15-4b19-456e-9b58-2af137a35bcd/ba9c5bcb-cf96-4215-a2f5-841ddb4a119c/high/0046.bin
+
+# Image Sizes (based upon the above URLs)
+# extralow: 340  x 480
+# low:      362  x 512
+# mid:      905  x 1280
+# high:     1447 x 2048
+
+# Notes on the "high" image size with the "bin" file extension.
+# Running the Linux "file" command gives the output:
+# Atari DEGAS Elite bitmap 320 x 200 x 16, color palette ffe0 0010 4a46 4946 0001 ...
+
+# But it seems unlikely that what # is expected to be the highest quality image is actually an old Atari bitmap with
+# 320 x 200 resolution! Using a hex editor (Okteta) to examine the bin file immediately revealed the string "JFIF"
+# near the beginning of the file. This is one of the things expected in the header of a "jpg" file but the first two
+# bytes of the file were 0x0000 when for a "jpg" they should be 0xFFD8. The rest of the beginning of the file also
+# looked like what would be expected in a "jpg" header section. Editing the first two bytes of the "bin" file to
+# 0xFFD8 resulted in it opening in the Gwenview image viewer and showed it to have a resolution of 1447 x 2048.
 
 @contextmanager
 def saving(thing):
