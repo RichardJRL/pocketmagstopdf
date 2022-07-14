@@ -147,8 +147,10 @@ def main():
                 raise e
 
             w, h = tuple(dim / dpi for dim in im.size)
+            wpix = im.width()
+            hpix = im.height()
 
-            print('Image is {:.2f}in x {:.2f}in at {} DPI'.format(w, h, dpi))
+            print('Image is {} x {} pixels and {:.2f}in x {:.2f}in at {} DPI'.format(wpix, hpix, w, h, dpi))
             c.setPageSize((w*inch, h*inch))
             c.drawInlineImage(im, 0, 0, w*inch, h*inch)
             c.showPage()
