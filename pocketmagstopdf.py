@@ -59,14 +59,6 @@ from reportlab.lib.units import inch
 
 
 # The pattern of the URL path for a magazine
-# Original Gist pattern
-# URL_PATH_PATTERN = re.compile(r'(?P<prefix>^[a-f0-9\-/]*/high/)[0-9]{4}.jpg')
-# One of my updated patterns
-# URL_PATH_PATTERN = re.compile(r'(?P<prefix>/mcmags/[a-f0-9\-]*/[a-f0-9\-]*/extralow/)[0-9]{4}.jpg')
-# One of my updated patterns, confirmed working 8 July 2022
-# Before splitting the quality setting off into a different named group
-# URL_PATH_PATTERN = re.compile(r'(?P<prefix>^/mcmags/[a-f0-9\-]*/[a-f0-9\-]*/(extralow|low|mid|high)/)[0-9]{4}.(bin|jpg)')
-# After splitting the quality setting off into a different named group
 URL_PATH_PATTERN = re.compile(r'(?P<prefix>^/mcmags/[a-f0-9\-]*/[a-f0-9\-]*)/(?P<imagequality>(extralow|low|mid|high)/)[0-9]{4}.(bin|jpg)')
 
 # Example URLs sampled 8 July 2022, deliberately using an advert from a magazine:
@@ -122,7 +114,6 @@ def main():
         raise RuntimeError("--quality= argument does not match any of the expected values: extralow|low|mid|high")
 
     c = canvas.Canvas(pdf_fn)
-    counter = 0
     with saving(c):
         for page_num in itertools.count(0):
             page_url = list(url)
@@ -143,8 +134,6 @@ def main():
                         jpg_header = binascii.unhexlify('FFD8')
                         filedata = f.read()[2:]
                         imgdata = BytesIO(jpg_header + filedata)
-                        # with open('images/hightest.jpg', 'wb') as hightest:
-                        #     hightest.write(imgdata.getbuffer())
                         try:
                             im = Image.open(imgdata)
                         except PIL.UnidentifiedImageError as uie:
@@ -163,9 +152,6 @@ def main():
             c.setPageSize((w*inch, h*inch))
             c.drawInlineImage(im, 0, 0, w*inch, h*inch)
             c.showPage()
-            counter += 1
-            if counter == 4:
-                break
 
 if __name__ == '__main__':
     main()
