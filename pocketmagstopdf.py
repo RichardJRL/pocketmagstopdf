@@ -8,7 +8,7 @@
 # Dedicated to the public domain where possible.
 # See: https://creativecommons.org/publicdomain/zero/1.0/
 """
-Download a pocketmags magazines in PDF format from the HTML5 reader.
+Download pocketmags magazines in PDF format from the HTML5 reader.
 
 Usage:
     pocketmagstopdf.py (-h | --help)
@@ -34,11 +34,11 @@ Notes:
     PLEASE USE THIS SCRIPT RESPONSIBLY. THE MAGAZINE PUBLISHING INDUSTRY RELIES
     HEAVILY ON INCOME FROM SALES WITH VERY SLIM PROFIT MARGINS.
 
-    URLs for pocketmag images can be found by using the HTML 5 reader and
+    URLs for pocketmags images can be found by using the HTML 5 reader and
     right-clicking on a page and selecting "inspect element". Look for URLs of
     the form:
 
-        http://magazines.magazineclonercdn.com/<uuid1>/<uuid2>/high/<num>.jpg
+        https://mcdatastore.blob.core.windows.net/mcmags/<uuid1>/<uuid2>/extralow/<num>.jpg
 
     where <uuid{1,2}> are strings of letters and numbers with dashes separating
     them and <num> is some 4-digit number.
@@ -83,7 +83,7 @@ QUALITY_PATTERN = re.compile("(extralow|low|mid|high)")
 # Running the Linux "file" command gives the output:
 # Atari DEGAS Elite bitmap 320 x 200 x 16, color palette ffe0 0010 4a46 4946 0001 ...
 
-# But it seems unlikely that what # is expected to be the highest quality image is actually an old Atari bitmap with
+# But it seems unlikely that what is expected to be the highest quality image is actually an old Atari bitmap with
 # 320 x 200 resolution! Using a hex editor (Okteta) to examine the bin file immediately revealed the string "JFIF"
 # near the beginning of the file. This is one of the things expected in the header of a "jpg" file but the first two
 # bytes of the file were 0x0000 when for a "jpg" they should be 0xFFD8. The rest of the beginning of the file also
@@ -145,6 +145,7 @@ def main():
                         im = Image.open(f)
                     # else: the high quality "bin" format URL
                     else:
+                        # Rewrite the beginning of the file in include the proper JPEG file type code.
                         jpg_header = binascii.unhexlify('FFD8')
                         filedata = f.read()[2:]
                         imgdata = BytesIO(jpg_header + filedata)
