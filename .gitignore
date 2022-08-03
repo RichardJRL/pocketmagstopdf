@@ -1,6 +1,7 @@
 # Project dirs
 images/
 pdfs/
+pmdown.py
 
 # Pycharm
 .idea/
