@@ -21,6 +21,10 @@ Options:
                                 [default: 150]
     --quality=QUALITY           Set magazine download quality; Choose from extralow, low, mid or high.
                                 [default: mid]
+    --title=TITLE               Set magazine title in the PDF metadata
+                                default value is the filename with;
+                                    - underscores replaced with spaces
+                                    - the file extension removed
 
     <pdf>                       Save output to this file.
     <url>                       A URL to one image from the magazine.
@@ -42,6 +46,7 @@ Notes:
 """
 
 import itertools
+import os.path
 import re
 from contextlib import contextmanager
 from urllib.error import HTTPError
@@ -99,6 +104,7 @@ def main():
     url = urlparse(url)
     dpi = float(opts['--dpi'])
     quality = str(opts['--quality'])
+    title = str(opts['--title'])
     print('URL is: {}'.format(url))
     print('File is: {}'.format(pdf_fn))
     print('DPI is {}'.format(dpi))
@@ -113,8 +119,16 @@ def main():
     if not q:
         raise RuntimeError("--quality= argument does not match any of the expected values: extralow|low|mid|high")
 
+    # NB: docopts gives the variable 'title' the string value of "None" not the type "None" when it is absent as a CLA
+    # Hence 'if title == "None"' rather than 'if title is None'
+    if title == "None":
+        (title, extension) = os.path.splitext(os.path.basename(pdf_fn))
+        title = title.replace('_', ' ')
+
     c = canvas.Canvas(pdf_fn)
+    c.setTitle(title)
     with saving(c):
+
         for page_num in itertools.count(0):
             page_url = list(url)
             file_extension = 'jpg'
@@ -147,11 +161,9 @@ def main():
                 raise e
 
             w, h = tuple(dim / dpi for dim in im.size)
-            wpix = im.width()
-            hpix = im.height()
 
-            print('Image is {} x {} pixels and {:.2f}in x {:.2f}in at {} DPI'.format(wpix, hpix, w, h, dpi))
-            c.setPageSize((w*inch, h*inch))
+            print('Image is {} x {} pixels and {:.2f}in x {:.2f}in at {} DPI'.format(im.width, im.height, w, h, dpi))
+            c.setPageSize((w * inch, h * inch))
             c.drawInlineImage(im, 0, 0, w*inch, h*inch)
             c.showPage()
 
