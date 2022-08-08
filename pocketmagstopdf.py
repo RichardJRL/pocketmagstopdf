@@ -31,6 +31,10 @@ Options:
     --range-to=PAGE-TO          Define a portion of the magazine to download, ending on this page number. (Optional)
                                 Downloads to the end of the magazine if absent.
                                 [default: 999]
+    --delay=DELAY               Set the time in seconds to wait between downloading each page of the magazine. (Optional)
+                                There is no delay if absent. The value of the delay may be integer or decimal.
+                                [default: 0]
+
     <pdf>                       Save output to this file.
     <url>                       A URL to one image from the magazine.
 
@@ -54,6 +58,7 @@ import itertools
 import os.path
 import re
 from contextlib import contextmanager
+from time import sleep
 from urllib.error import HTTPError
 from urllib.parse import urlparse, urlunparse
 from urllib.request import urlopen
@@ -112,6 +117,7 @@ def main():
     title = str(opts['--title'])
     range_from = int(opts['--range-from'])
     range_to = int(opts['--range-to'])
+    delay = float(opts['--delay'])
 
     m = URL_PATH_PATTERN.match(url.path)
     if not m:
@@ -130,11 +136,11 @@ def main():
 
     # Check range_from and range_to are both >0, exit if not
     if range_from < 1 or range_to < 1:
-        raise RuntimeError("Error setting the page range to download, the optional arguments --range-from and --range-to, if specified, must be integer values greater than 1")
+        raise RuntimeError("Error setting the page range to download, the optional arguments --range-from= and --range-to=, if specified, must have integer values greater than 1")
 
     # Check range_from < range_to
     if range_from > range_to:
-        raise RuntimeError("Error setting the page range to download. --range-from must be less than --range-to")
+        raise RuntimeError("Error setting the page range to download. the value of--range-from= must be less than the value of --range-to=")
 
     # Assemble range text
     end_text = " to page " + str(range_to)
@@ -142,11 +148,16 @@ def main():
         end_text = " to the end of the magazine"
     range_text = 'Range of pages to download is page ' + str(range_from) + end_text
 
+    # Check delay value
+    if delay < 0:
+        raise RuntimeError("Error setting the delay between page downloads. The value of --delay= must be not be less than zero.")
+
     print('URL is {}'.format(url.geturl()))
     print('File is {}'.format(pdf_fn))
     print('DPI is {}'.format(dpi))
     print('Quality is {}'.format(quality))
     print(range_text)
+    print('Delay between downloading each page is {} seconds'.format(delay))
 
     c = canvas.Canvas(pdf_fn)
     c.setTitle(title)
@@ -190,6 +201,7 @@ def main():
             c.setPageSize((w * inch, h * inch))
             c.drawInlineImage(im, 0, 0, w*inch, h*inch)
             c.showPage()
+            sleep(delay)
 
 if __name__ == '__main__':
     main()

@@ -37,6 +37,9 @@ With thanks to:
     --range-to=PAGE-TO          Define a portion of the magazine to download, ending on this page number. (Optional)
                                 Downloads to the end of the magazine if absent.
                                 [default: 999]
+    --delay=DELAY               Set the time in seconds to wait between downloading each page of the magazine. (Optional)
+                                There is no delay if absent. The value of the delay may be integer or decimal.
+                                [default: 0]
 
     <pdf>                       Save output to this file.
     <url>                       A URL to one image from the magazine.
