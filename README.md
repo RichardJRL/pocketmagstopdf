@@ -31,6 +31,12 @@ With thanks to:
                                 default value is the filename with;
                                     - underscores replaced with spaces
                                     - the file extension removed
+    --range-from=PAGE-FROM      Define a portion of the magazine to download, starting from this page number. (Optional)
+                                Downloads from the beginning of the magazine if absent.
+                                [default: 1]
+    --range-to=PAGE-TO          Define a portion of the magazine to download, ending on this page number. (Optional)
+                                Downloads to the end of the magazine if absent.
+                                [default: 999]
 
     <pdf>                       Save output to this file.
     <url>                       A URL to one image from the magazine.
