@@ -25,7 +25,12 @@ Options:
                                 default value is the filename with;
                                     - underscores replaced with spaces
                                     - the file extension removed
-
+    --range-from=PAGE-FROM      Define a portion of the magazine to download, starting from this page number. (Optional)
+                                Downloads from the beginning of the magazine if absent.
+                                [default: 1]
+    --range-to=PAGE-TO          Define a portion of the magazine to download, ending on this page number. (Optional)
+                                Downloads to the end of the magazine if absent.
+                                [default: 999]
     <pdf>                       Save output to this file.
     <url>                       A URL to one image from the magazine.
 
@@ -105,10 +110,8 @@ def main():
     dpi = float(opts['--dpi'])
     quality = str(opts['--quality'])
     title = str(opts['--title'])
-    print('URL is: {}'.format(url))
-    print('File is: {}'.format(pdf_fn))
-    print('DPI is {}'.format(dpi))
-    print('Quality is {}'.format(quality))
+    range_from = int(opts['--range-from'])
+    range_to = int(opts['--range-to'])
 
     m = URL_PATH_PATTERN.match(url.path)
     if not m:
@@ -125,21 +128,41 @@ def main():
         (title, extension) = os.path.splitext(os.path.basename(pdf_fn))
         title = title.replace('_', ' ')
 
+    # Check range_from and range_to are both >0, exit if not
+    if range_from < 1 or range_to < 1:
+        raise RuntimeError("Error setting the page range to download, the optional arguments --range-from and --range-to, if specified, must be integer values greater than 1")
+
+    # Check range_from < range_to
+    if range_from > range_to:
+        raise RuntimeError("Error setting the page range to download. --range-from must be less than --range-to")
+
+    # Assemble range text
+    end_text = " to page " + str(range_to)
+    if range_to == 999:
+        end_text = " to the end of the magazine"
+    range_text = 'Range of pages to download is page ' + str(range_from) + end_text
+
+    print('URL is {}'.format(url.geturl()))
+    print('File is {}'.format(pdf_fn))
+    print('DPI is {}'.format(dpi))
+    print('Quality is {}'.format(quality))
+    print(range_text)
+
     c = canvas.Canvas(pdf_fn)
     c.setTitle(title)
     with saving(c):
 
-        for page_num in itertools.count(0):
+        for page_num in range(range_from - 1, range_to):
             page_url = list(url)
             file_extension = 'jpg'
             if quality == 'high':
                 file_extension = 'bin'
             page_url[2] = '{}/{}/{:04d}.{}'.format(prefix, quality, page_num, file_extension)
             page_url = urlunparse(page_url)
-            print('Downloading page {} from {}...'.format(page_num, page_url))
 
             try:
                 with urlopen(page_url) as f:
+                    print('Downloading page {} from {}...'.format(page_num + 1, page_url))
                     # if: the extralow, low & mid quality "jpg" format URLs
                     if quality == 'extralow' or quality == 'low' or quality == 'mid':
                         im = Image.open(f)
