@@ -17,16 +17,16 @@ Usage:
 Options:
 
     -h, --help                  Print brief usage summary.
-    --dpi=DPI                   Set image resolution in dots per inch.
+    --dpi=DPI                   Set image resolution in dots per inch. (Optional)
                                 [default: 150]
-    --quality=QUALITY           Set magazine download quality; Choose from extralow, low, mid or high.
+    --quality=QUALITY           Set magazine download quality; Choose from extralow, low, mid or high. (Optional)
                                 [default: mid]
-    --title=TITLE               Set magazine title in the PDF metadata
+    --title=TITLE               Set magazine title in the PDF metadata. (Optional)
                                 default value is the filename with;
                                     - underscores replaced with spaces
                                     - the file extension removed
     --range-from=PAGE-FROM      Define a portion of the magazine to download, starting from this page number. (Optional)
-                                Downloads from the beginning of the magazine if absent.
+                                Downloads from the beginning of the magazine - page 1 - if absent.
                                 [default: 1]
     --range-to=PAGE-TO          Define a portion of the magazine to download, ending on this page number. (Optional)
                                 Downloads to the end of the magazine if absent.
@@ -34,9 +34,19 @@ Options:
     --delay=DELAY               Set the time in seconds to wait between downloading each page of the magazine. (Optional)
                                 There is no delay if absent. The value of the delay may be integer or decimal.
                                 [default: 0]
+    --save-images=SAVE-IMAGES   Save the downloaded JPEG images of the magazine pages to a subdirectory with the same
+                                name as the magazine in addition to generating the PDF of the magazine. (Optional)
+                                Choose from yes or no.
+                                [default: no]
+    --image-subdir-prefix=PFX   If --save-images=yes then prefix name of the subdirectory the images are saved to with
+                                this string. Blank by default. (Optional)
+                                [default: ]
+    --image-subdir-suffix=SFX   If --save-images=yes then suffix name of the subdirectory the images are saved to with
+                                this string. Blank by default. (Optional)
+                                [default: ]
 
-    <pdf>                       Save output to this file.
-    <url>                       A URL to one image from the magazine.
+    <pdf>                       Save output to this file. (Required)
+    <url>                       A URL to one image from the magazine. (Required)
 
 Notes:
 
@@ -118,6 +128,9 @@ def main():
     range_from = int(opts['--range-from'])
     range_to = int(opts['--range-to'])
     delay = float(opts['--delay'])
+    save_images = str(opts['--save-images'])
+    image_subdir_prefix = str(opts['--image-subdir-prefix'])
+    image_subdir_suffix = str(opts['--image-subdir-suffix'])
 
     m = URL_PATH_PATTERN.match(url.path)
     if not m:
@@ -152,16 +165,30 @@ def main():
     if delay < 0:
         raise RuntimeError("Error setting the delay between page downloads. The value of --delay= must be not be less than zero.")
 
+    # Check save_images value
+    save_images = save_images.lower()
+    if save_images != 'yes' and save_images != 'no':
+        raise RuntimeError("Error setting the behaviour of saving images. The value of --save-images= must be either yes or no.")
+
     print('URL is {}'.format(url.geturl()))
     print('File is {}'.format(pdf_fn))
     print('DPI is {}'.format(dpi))
     print('Quality is {}'.format(quality))
     print(range_text)
     print('Delay between downloading each page is {} seconds'.format(delay))
+    print('Saving images is {}'.format(save_images))
 
     c = canvas.Canvas(pdf_fn)
     c.setTitle(title)
     with saving(c):
+
+        # create directory to hold magazine images, if required
+        if save_images == 'yes':
+            (pdf_parent_dir_name, pdf_filename) = os.path.split(os.path.abspath(pdf_fn))
+            (image_subdir_name, extension) = os.path.splitext(pdf_filename)
+            image_subdir_name = image_subdir_prefix + image_subdir_name + image_subdir_suffix
+            image_subdir_path = os.path.join(pdf_parent_dir_name, image_subdir_name)
+            os.makedirs(image_subdir_path)
 
         for page_num in range(range_from - 1, range_to):
             page_url = list(url)
@@ -201,6 +228,11 @@ def main():
             c.setPageSize((w * inch, h * inch))
             c.drawInlineImage(im, 0, 0, w*inch, h*inch)
             c.showPage()
+            if save_images == 'yes':
+                # Save in "human-ranged" format - starting the page count from 1, not 0.
+                image_name = '{:04d}.jpg'.format(page_num + 1)
+                image_path = os.path.join(image_subdir_path, image_name)
+                im.save(image_path)
             sleep(delay)
 
 if __name__ == '__main__':

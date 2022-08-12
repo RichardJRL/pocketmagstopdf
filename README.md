@@ -40,6 +40,16 @@ With thanks to:
     --delay=DELAY               Set the time in seconds to wait between downloading each page of the magazine. (Optional)
                                 There is no delay if absent. The value of the delay may be integer or decimal.
                                 [default: 0]
+    --save-images=SAVE-IMAGES   Save the downloaded JPEG images of the magazine pages to a subdirectory with the same
+                                name as the magazine in addition to generating the PDF of the magazine. (Optional)
+                                Choose from yes or no.
+                                [default: no]
+    --image-subdir-prefix=PFX   If --save-images=yes then prefix name of the subdirectory the images are saved to with
+                                this string. Blank by default. (Optional)
+                                [default: ]
+    --image-subdir-suffix=SFX   If --save-images=yes then suffix name of the subdirectory the images are saved to with
+                                this string. Blank by default. (Optional)
+                                [default: ]
 
     <pdf>                       Save output to this file.
     <url>                       A URL to one image from the magazine.
