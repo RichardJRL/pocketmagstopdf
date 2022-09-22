@@ -2,6 +2,7 @@
 images/
 pdfs/
 pmdown.py
+*.credentials
 
 # Pycharm
 .idea/
