@@ -69,6 +69,14 @@ Options:
     --uuid-randomise            Uses a random UUID to download the PDF when '--quality=original' is specified. (Optional)
                                 [default: False]
 
+    --quiet                     Suppress printing of all output except warning and error messages.
+                                [default: False]
+
+    --debug                     Print extra output to aid debugging of the program.
+                                Setting both '--quiet' and '--debug' is contradictory
+                                If this happens, a warning is issued and the debug setting overrides the quiet setting.
+                                [default: False]
+
     <pdf>                       Save output to this file. (Required)
     <url>                       A URL to one image from the magazine. (Required)
 
@@ -166,6 +174,8 @@ def main():
     image_subdir_suffix = str(opts['--image-subdir-suffix'])
     user_uuid = str(opts['--uuid'])
     user_uuid_randomise = bool(opts['--uuid-randomise'])
+    verbose = not(bool(opts['--quiet']))
+    debug = bool(opts['--debug'])
 
     m = URL_PATH_PATTERN.match(url.path)
     if not m:
@@ -233,7 +243,12 @@ def main():
             if not UUID_PATTERN.match(user_uuid):
                 raise RuntimeError('User UUID supplied with \'--uuid=\' is not a valid UUID')
         if user_uuid_randomise == True:
-            user_uuid = uuid.uuid4()
+            user_uuid = str(uuid.uuid4())
+
+    # Check if both quiet output and debug output options are specified. Debug overrides quiet
+    if verbose is False and debug is True:
+        print('Warning: Specifying both \'--quiet\' and \'--debug\' is contradictory. Debug output setting will override quiet output setting.')
+        verbose = True
 
     print('URL is {}'.format(url.geturl()))
     print('File is {}'.format(pdf_fn))
@@ -246,6 +261,9 @@ def main():
     print('Saving images is {}'.format(save_images))
     print('User UUID is {}'.format(user_uuid))
     print('Randomise User UUID is {}'.format(str(user_uuid_randomise).lower()))
+    print('Quiet output is {}'.format(str(not verbose).lower()))
+    print('Debug output is {}'.format(str(debug).lower()))
+    print()
 
     if quality != 'original':
         c = canvas.Canvas(pdf_fn)
@@ -270,7 +288,8 @@ def main():
 
                 try:
                     with urlopen(page_url) as f:
-                        print('Downloading page {} from {}...'.format(page_num + 1, page_url))
+                        if verbose:
+                            print('Downloading page {} from {}...'.format(page_num + 1, page_url))
                         # if: the extralow, low & mid quality "jpg" format URLs
                         if quality == 'extralow' or quality == 'low' or quality == 'mid':
                             im = Image.open(f)
@@ -283,19 +302,20 @@ def main():
                             try:
                                 im = Image.open(imgdata)
                             except PIL.UnidentifiedImageError as uie:
-                                print("Page", page_num, "is not a valid image file. Unable to continue; exiting...")
+                                print("Error: Page", page_num, "is not a valid image file. Unable to continue; exiting...")
                                 break
 
                 except HTTPError as e:
                     if e.code == 404:
-                        print('No image found => stopping')
+                        if verbose:
+                            print('No image found => stopping')
                         break
                     raise e
 
                 w, h = tuple(dim / dpi for dim in im.size)
 
-                print(
-                    'Image is {} x {} pixels and {:.2f}in x {:.2f}in at {} DPI'.format(im.width, im.height, w, h, dpi))
+                if verbose:
+                    print('Image is {} x {} pixels and {:.2f}in x {:.2f}in at {} DPI'.format(im.width, im.height, w, h, dpi))
                 c.setPageSize((w * inch, h * inch))
                 c.drawInlineImage(im, 0, 0, w * inch, h * inch)
                 c.showPage()
@@ -308,8 +328,8 @@ def main():
 
     # else quality = 'original'
     else:
-        print("Downloading magazine as the original PDF")
-        user_uuid = uuid.uuid4()
+        if verbose:
+            print("Downloading magazine as the original PDF")
         post_request_url = 'http://readerv2.pocketmags.com/PrintPage'
         post_request_headers = {
             "Content-Type": "application/x-www-form-urlencoded",
@@ -324,6 +344,8 @@ def main():
             "user": user_uuid,
         }
 
+        if verbose:
+            print('Determining the page number of the end of the magazine')
         # Check the range_to value exists as a magazine page (as the default is 999)
         # by checking the extralow JPG for the page exists. Need HTTP response 200, not 404.
         # Jumps between pages in 20,10,5,2,1 page intervals to avoid having to check everysingle page.
@@ -345,8 +367,9 @@ def main():
             if jpeg_exists_response.status_code == 200:
                 last_good_page = page_num
                 if last_good_page + 1 == last_bad_page:
-                    print("Page {} is the last good page".format(last_good_page))
-                    range_to = last_good_page + 1
+                    if verbose:
+                        # Output as human-readable page numbers (counting from 1 not 0)
+                        print("Page {} is the last good page".format(last_good_page + 1))
                     break
                 page_num += page_jump
             elif jpeg_exists_response.status_code == 404:
@@ -362,33 +385,52 @@ def main():
                     raise RuntimeError("Error: Cannot find any valid page numbers, exiting...")
             else:
                 raise RuntimeError(
-                    "Unexpected HTTP error code encountered while probing for the last page in the magazine: HTTP error {}".format(
+                    "Error: Unexpected HTTP error code encountered while probing for the last page in the magazine: HTTP error {}".format(
                         jpeg_exists_response.status_code))
-            print("HTTP response code {} for URL {}".format(jpeg_exists_response.status_code, jpeg_url))
-            print("Last good page number: {}, last bad page number: {}".format(last_good_page, last_bad_page))
-            print("Page jump value is {}".format(page_jump))
-            print("Next page to be queried is {}".format(page_num))
+            if debug:
+                print("HTTP response code {} for URL {}".format(jpeg_exists_response.status_code, jpeg_url))
+                print("Last good page number: {}, last bad page number: {}".format(last_good_page, last_bad_page))
+                print("Page jump value is {}".format(page_jump))
+                print("Next page to be queried is {}".format(page_num))
 
-        # Add the required number of pages to the post_request_data
+        # Determine if magazine is to be downloaded to the end or an earlier user-specified page number
+        # Convert last_good_page to human-readable form, the same form as the range_to variable.
+        last_good_page = last_good_page + 1
+        if last_good_page < range_to:
+            range_to = last_good_page
+            if verbose:
+                print('Downloading the magazine from page {} to the end of the magazine on page {})'.format(range_from, range_to, last_good_page))
+        else:
+            if verbose:
+                print('Downloading the magazine from page {} to page {} instead of to the end of the magazine on page {})'.format(range_from, range_to, last_good_page))
+
+
+# Add the required number of pages to the post_request_data
         index_number = 0
         for page_num in range(range_from - 1, range_to):
             post_request_data["pages[{}]".format(index_number)] = page_num
             index_number += 1
-        print(post_request_data)
+        if debug:
+            print('Post request data to be sent is:')
+            print(post_request_data)
 
         pdf_response = requests.post(url=post_request_url, data=post_request_data, headers=post_request_headers)
+
         if pdf_response.status_code == 200:
-            print('Success: Downloaded magazine')
+            if verbose:
+                print('Success: Downloaded magazine')
         else:
             print('Error: Unable to download magazine: HTTP error code {}'.format(pdf_response.status_code))
             exit(1)
 
         pdf_download = pdf_response.content
 
-        # Save the original un-edited PDF download
+        # Save the PDF download
         with open(pdf_fn, 'bw') as pdf_original:
             pdf_original.write(pdf_download)
-            print('Saved PDF download to {}'.format(pdf_fn))
+            if verbose:
+                print('Saved PDF download to {}'.format(pdf_fn))
+
 
 if __name__ == '__main__':
     main()
