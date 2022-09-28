@@ -120,7 +120,6 @@ import re
 import uuid
 import zlib
 from contextlib import contextmanager
-from datetime import datetime
 from time import sleep
 from urllib.error import HTTPError
 from urllib.parse import urlparse, urlunparse
@@ -130,6 +129,9 @@ import binascii
 import docopt
 import PIL
 from io import BytesIO
+from datetime import datetime
+from datetime import timedelta
+import random
 
 import requests as requests
 from PIL import Image
@@ -182,7 +184,7 @@ def main():
     pdf_fn, url = (opts[k] for k in ('<pdf>', '<url>'))
     url = urlparse(url)
     dpi = float(opts['--dpi'])
-    quality = str(opts['--quality'])
+    quality = str(opts['--quality']).lower()
     title = str(opts['--title'])
     range_from = int(opts['--range-from'])
     range_to = int(opts['--range-to'])
@@ -350,7 +352,7 @@ def main():
                     im.save(image_path)
                 sleep(delay)
 
-    # else quality = 'original'
+    # else quality == 'original'
     else:
         if verbose:
             print("Downloading magazine as the original PDF")
@@ -426,15 +428,15 @@ def main():
                 print('Downloading the magazine from page {} to the end of the magazine on page {})'.format(range_from, range_to, last_good_page))
         else:
             if verbose:
-                print('Downloading the magazine from page {} to page {} instead of to the end of the magazine on page {})'.format(range_from, range_to, last_good_page))
+                print('Downloading the magazine from page {} to page {} instead of to the end of the magazine on page {}'.format(range_from, range_to, last_good_page))
 
-
-# Add the required number of pages to the post_request_data
+        # Add the required number of pages to the post_request_data
         index_number = 0
         for page_num in range(range_from - 1, range_to):
             post_request_data["pages[{}]".format(index_number)] = page_num
             index_number += 1
         if debug:
+            print()
             print('Post request data to be sent is:')
             print(post_request_data)
 
@@ -450,18 +452,110 @@ def main():
         pdf_download = bytearray(pdf_response.content)
 
         # Manipulate various elements of the PDF file
-        number_of_pages = range_to - range_from
+        number_of_pages = range_to - (range_from - 1)
 
-        # The user UUID watermarks which printed on each page are all added together as objects at the beginning of the
-        # PDF file before any of the magazine content appears. A 'MediaBox' object signals the end of the user UUID
-        # objects and the start of the magazine content.
+        # The user UUID watermarks which printed on each page are all added together as objects beginning with
+        # '<</Length' located at the beginning of the PDF file before any of the magazine content appears.
+        # The objects are variable length flate-encoded streams that hold the User UUID amongst other compressed data.
+        # The User UUID never appears in plaintext in the PDF.
+        # It is the first object after the '<</Length' objects  which is not '<</Length' but '<</Type...' or
+        # '<</ArtBox...' or something else that signifies the start of the magazine content.
+        # There should be twice as many '<</Length' objects as pages in the magazine.
+        start_of_magazine_content_location = -1
         if verbose:
-            print('Searching for the first MediaBox object...')
-        start_of_magazine_content_location = pdf_download.find(b'<</Type/Page/MediaBox')
-        if debug:
-            print('Byte offset of the first MediaBox object after the user UUID objects is: {}'.format(
-                hex(start_of_magazine_content_location)))
+            print('Searching for the first object containing magazine content...')
+        # Find the short/long pairs of flate-encoded stream objects that hold the position and text of the user UUID watermark on each page
+        if verbose:
+            print()
+            print('Searching for the flate-encoded stream objects containing the User UUID watermark...')
+        length_string = '<</Length '
+        next_object_string = length_string
+        # Quick and dirty way to get to the approximate location to start searching
+        # The iTextSharp object will be precisely located later, but it's a circular dependency situation here...
+        next_object_location = pdf_download.find(b'iTextSharp')
+        uuid_stream_object_list = list()
+        while next_object_location != -1:
+            next_object_location += 1
+            # Find each '<</' after the iTextSharp object
+            next_object_location = pdf_download.find(b'<</', next_object_location)
+            next_object_string = pdf_download[next_object_location:next_object_location + len(length_string)].decode(
+                encoding='cp1252')
+            # Find the first string beginning '<</...' that is not '<</Length'. That is the start of the magazine.
+            if next_object_string == length_string:
+                uuid_stream_object_list.append(next_object_location)
+            else:
+                start_of_magazine_content_location = pdf_download.find(b'>>', next_object_location) + 1
+                break
+        if len(uuid_stream_object_list) == number_of_pages * 2:
+            if verbose:
+                print('Found the expected number of flate-encoded User UUID stream objects')
+                print(
+                    'The number of User UUID stream objects ({}) is twice then number of pages ({}). This is correct.'.format(
+                        len(uuid_stream_object_list), number_of_pages))
+        else:
+            print(
+                'Warning: The number of User UUID stream objects ({}) should be twice then number of pages ({}). It is not.'.format(
+                    len(uuid_stream_object_list), number_of_pages))
 
+        # Print summary of all User UUID stream objects found
+        if debug:
+            print()
+            uuid_stream_object_temp_counter = 0
+            for uuid_stream_object_offset in uuid_stream_object_list:
+                uuid_stream_object_temp_counter += 1
+                print('{}: User UUID flate-encoded stream object found at offset {}'.format(uuid_stream_object_temp_counter,
+                                                                          hex(uuid_stream_object_offset)))
+
+        # Decode the flate-encoded objects containing the User UUID objects out of curiosity
+        if debug:
+            print()
+            print('Decoding the previously discovered flate-encoded objects containing the User UUID watermarks...')
+        # for uuid_object_location in uuid_placement_object_location_list:
+        uuid_object_counter = 0
+        for uuid_object_location in uuid_stream_object_list:
+            length_string_start_offset = uuid_object_location + 10
+            length_string_end_offset = pdf_download.find(b'/Filter/FlateDecode', length_string_start_offset) - 1
+            flate_encoded_stream_integer_length = int(
+                pdf_download[length_string_start_offset:length_string_end_offset + 1].decode(encoding='cp1252'))
+            flate_encoded_stream_start_offset = pdf_download.find(b'>>stream\n', uuid_object_location) + 9
+            flate_encoded_stream_end_offset = flate_encoded_stream_start_offset + flate_encoded_stream_integer_length - 1
+            flate_encoded_stream_content = pdf_download[
+                                           flate_encoded_stream_start_offset:flate_encoded_stream_end_offset + 1]
+            flate_encoded_stream_decoded_content = zlib.decompress(flate_encoded_stream_content, wbits=0)
+            if debug:
+                print()
+                print('Working on User UUID flate-encoded stream number {}'.format(uuid_object_counter + 1))
+                print('User UUID flate-encoded placement length string start offset is {}'.format(
+                    hex(length_string_start_offset)))
+                print('User UUID flate-encoded placement length string end offset is {}'.format(
+                    hex(length_string_end_offset)))
+                print('User UUID flate-encoded placement stream real integer value is {}'.format(
+                    flate_encoded_stream_integer_length))
+                print('User UUID flate-encoded placement stream start offset is {}'.format(
+                    hex(flate_encoded_stream_start_offset)))
+                print('User UUID flate-encoded placement stream end offset is {}'.format(
+                    hex(flate_encoded_stream_end_offset)))
+                print('User UUID flate-encoded placement stream content byte length is {}'.format(
+                    len(flate_encoded_stream_content)))
+                print('User UUID flate-encoded placement stream content is {}'.format(flate_encoded_stream_content))
+                print('User UUID flate-encoded placement decoded stream content is {}'.format(
+                    flate_encoded_stream_decoded_content))
+
+            if user_uuid_destroy:
+                if verbose:
+                    print('')
+                    print('Zeroing the user UUID flate-encoded placement stream data...')
+                flate_encoded_stream_replacement_content = bytes(
+                    '0'.encode(encoding='cp1252') * len(flate_encoded_stream_content))
+                if debug:
+                    print('User UUID flate-encoded placement replacement stream content is: {}'.format(
+                        flate_encoded_stream_replacement_content))
+                pdf_download[
+                flate_encoded_stream_start_offset:flate_encoded_stream_end_offset + 1] = flate_encoded_stream_replacement_content
+            uuid_object_counter += 1
+
+        # The software that Pocketmags use to add the User UUID watermarks is called iTextSharp and it adds its own
+        # object near the beginning of the PDF in order to advertise itself and add two timestamps.
         # Find the location of the iTextSharp object that includes the two timestamps
         if verbose:
             print()
@@ -481,8 +575,8 @@ def main():
 
             # Find the CreationDate timestamp property location
             itextsharp_object_creationdate_property_location = pdf_download.find(b'CreationDate',
-                                                                              itextsharp_object_location,
-                                                                              start_of_magazine_content_location)
+                                                                                 itextsharp_object_location,
+                                                                                 itextsharp_object_end_location)
             if itextsharp_object_creationdate_property_location == -1:
                 print('Warning: cannot find the iTextSharp object\'s CreationDate property.')
             else:
@@ -491,7 +585,7 @@ def main():
                         hex(itextsharp_object_creationdate_property_location)))
             # Find the ModDate timestamp property location
             itextsharp_object_moddate_property_location = pdf_download.find(b'ModDate', itextsharp_object_location,
-                                                                         start_of_magazine_content_location)
+                                                                            itextsharp_object_end_location)
             if itextsharp_object_moddate_property_location == -1:
                 print('Warning: cannot find the iTextSharp object\'s ModDate property.')
             else:
@@ -501,28 +595,36 @@ def main():
 
         # Create new timestamps for the iTextSharp object CreationDate and ModDate properties
         # Timestamps need to be 14 char YYYYmmddHHMMSS format.
-        # TODO: Add some randomness to the new timestamps
+        time_now = datetime.now()
+        time_delta = timedelta(microseconds=random.randrange(0, 999),
+                               milliseconds=random.randrange(0, 999),
+                               seconds=random.randrange(0, 60),
+                               minutes=random.randrange(0, 60),
+                               hours=random.randrange(0, 23),
+                               days=random.randrange(0, 30),
+                               weeks=random.randrange(0, 4))
+        time_replacement = time_now + time_delta
         timestamp_length = 14
         creationdate_date_offset_from_property_tag = 15
         moddate_date_offset_from_property_tag = 10
         itextsharp_object_original_content = pdf_download[itextsharp_object_location:itextsharp_object_end_location]
         itextsharp_object_creationdate_property_original_value = pdf_download[
-            itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag:
-            itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag + timestamp_length].decode(encoding='cp1252')
-        itextsharp_object_creationdate_property_replacement_value = datetime.now().strftime('%Y%m%d%H%M%S').encode(
+                                                                 itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag:
+                                                                 itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag + timestamp_length].decode(encoding='cp1252')
+        itextsharp_object_creationdate_property_replacement_value = time_replacement.strftime('%Y%m%d%H%M%S').encode(
             encoding='cp1252')
         itextsharp_object_moddate_property_original_value = pdf_download[
-            itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag:
-            itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag + timestamp_length].decode(encoding='cp1252')
-        itextsharp_object_moddate_property_replacement_value = datetime.now().strftime('%Y%m%d%H%M%S').encode(encoding='cp1252')
+                                                            itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag:
+                                                            itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag + timestamp_length].decode(encoding='cp1252')
+        itextsharp_object_moddate_property_replacement_value = time_replacement.strftime('%Y%m%d%H%M%S').encode(encoding='cp1252')
         if timestamp_change:
             pdf_download[
-                itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag:
-                itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag + len(
+            itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag:
+            itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag + len(
                 itextsharp_object_creationdate_property_replacement_value)] = itextsharp_object_creationdate_property_replacement_value
             pdf_download[
-                itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag:
-                itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag + len(
+            itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag:
+            itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag + len(
                 itextsharp_object_moddate_property_replacement_value)] = itextsharp_object_moddate_property_replacement_value
         if debug:
             print('Original iTextSharp CreationDate timestamp is {}, length {}'.format(
@@ -555,8 +657,8 @@ def main():
         latest_location = 0
         while latest_location > -1:
             latest_location: int = pdf_download.find(uuid_opacity_object_original_value,
-                                                  uuid_opacity_object_last_location_found + 1,
-                                                  start_of_magazine_content_location)
+                                                     uuid_opacity_object_last_location_found + 1,
+                                                     start_of_magazine_content_location)
             if latest_location != -1:
                 uuid_opacity_object_location_list.append(int(latest_location))
                 count += 1
@@ -566,17 +668,8 @@ def main():
 
         # Check the number of UUID opacity objects found matches the number of pages expected in the magazine
         if len(uuid_opacity_object_location_list) != number_of_pages:
-            # TODO: Decide whether to raise an exception here
             print('Warning: The number of UUID opacity objects found does not equal the number of pages expected:')
             print('         UUID Opacity objects found: {}, pages expected: {}'.format(
-                len(uuid_opacity_object_location_list), number_of_pages))
-        elif len(uuid_opacity_object_location_list) > number_of_pages:
-            print('Warning: More UUID opacity object locations found than the number of pages expected:')
-            print('         UUID Opacity objects found: {}, pages expected: {}'.format(
-                len(uuid_opacity_object_location_list), number_of_pages))
-        elif len(uuid_opacity_object_location_list) < number_of_pages:
-            print('Warning: Warning: Fewer UUID opacity object locations found than the number of pages expected:')
-            print('         UUID opacity objects found: {}, pages expected: {}'.format(
                 len(uuid_opacity_object_location_list), number_of_pages))
         else:
             if verbose:
@@ -585,113 +678,34 @@ def main():
                         len(uuid_opacity_object_location_list), number_of_pages))
 
         # Print summary of all user UUID opacity objects found
-        uuid_opacity_object_temp_counter = 0
-        for uuid_opacity_object_offset in uuid_opacity_object_location_list:
-            uuid_opacity_object_temp_counter += 1
-            if debug:
+        if debug:
+            uuid_opacity_object_temp_counter = 0
+            for uuid_opacity_object_offset in uuid_opacity_object_location_list:
+                uuid_opacity_object_temp_counter += 1
                 print('{}: UUID opacity object found at offset {}'.format(uuid_opacity_object_temp_counter,
                                                                           hex(uuid_opacity_object_offset)))
 
+        if debug:
+            print()
         # Modify user UUID opacity objects to make the UUID less visible
         # ca = fill (non-stroking), CA = border (stroking)
         # NB: Do NOT change the length of the uuid_opacity_object_replacement_value string!
+        uuid_opacity_object_replacement_value = b'<</ca 0.35/CA 0.3>>'
         if user_uuid_hide:
             uuid_opacity_object_replacement_value = b'<</ca 0.00/CA 0.0>>'
         if user_uuid_destroy:
             uuid_opacity_object_replacement_value = b'0000000000000000000'
-        for uuid_opacity_object_location in uuid_opacity_object_location_list:
-            pdf_download[uuid_opacity_object_location:uuid_opacity_object_location + len(
-                uuid_opacity_object_replacement_value)] = uuid_opacity_object_replacement_value
-            if debug:
-                if user_uuid_hide or user_uuid_destroy:
-                    print('New UUID opacity object value written to the PDF file is: {}'.format(pdf_download[
-                                                                                            uuid_opacity_object_location:uuid_opacity_object_location + len(
-                                                                                                uuid_opacity_object_replacement_value)]))
-
-        # Find the short/long pairs of flate-encoded stream objects that hold the position and text of the user UUID watermark on each page
-        if verbose:
-            print()
-            print('Searching for flate-encoded stream objects...')
-        uuid_placement_object_location_list = list()
-        uuid_text_object_location_list = list()
-
-        latest_location = itextsharp_object_location
-        number_of_uuid_stream_objects_found = 0
-        while latest_location != -1:
-            # TODO: This does not specifically check for flate-encoded streams, it looks for the <</Length string that preceeds them, and may be subject to errors
-            if number_of_uuid_stream_objects_found % 2 == 0:
-                latest_location = pdf_download.find(b'<</Length', latest_location + 1, start_of_magazine_content_location)
-                if latest_location != -1:
-                    uuid_placement_object_location_list.append(latest_location)
-                    number_of_uuid_stream_objects_found += 1
-            else:
-                latest_location = pdf_download.find(b'<</Length', latest_location + 1, start_of_magazine_content_location)
-                if latest_location != -1:
-                    uuid_text_object_location_list.append(latest_location)
-                    number_of_uuid_stream_objects_found += 1
-
-        if number_of_uuid_stream_objects_found / 2 == number_of_pages and len(
-                uuid_placement_object_location_list) == number_of_pages and len(
-                uuid_text_object_location_list) == number_of_pages:
-            if verbose:
-                print('Found the expected number ({}) of user UUID flate-encoded stream objects in the PDF'.format(
-                    number_of_pages))
-        else:
-            print('Warning: Wrong number of user UUID flate-encoded stream objects found:')
-            if len(uuid_placement_object_location_list) == number_of_pages:
-                print('         Found {} user UUID placement objects when {} were expected'.format(
-                    len(uuid_placement_object_location_list), number_of_pages))
-            if len(uuid_text_object_location_list) == number_of_pages:
-                print('         Found {} user UUID text objects when {} were expected'.format(
-                    len(uuid_text_object_location_list), number_of_pages))
-
-        # Decode the flate-encoded objects out of curiosity
-        if debug:
-            print()
-            print('Decoding the discovered flate-encoded objects...')
-        # TODO: Re-use this code to rewrite them instead (this will be more useful)
-        # for uuid_placement_object_offset in uuid_placement_object_location_list:
-        for uuid_placement_object_offset in uuid_placement_object_location_list + uuid_text_object_location_list:
-            length_string_start_offset = uuid_placement_object_offset + 10
-            length_string_end_offset = pdf_download.find(b'/Filter/FlateDecode', length_string_start_offset) - 1
-            # TODO: Test length_string_end_offset != -1
-            flate_encoded_stream_integer_length = int(
-                pdf_download[length_string_start_offset:length_string_end_offset + 1].decode(encoding='cp1252'))
-            flate_encoded_stream_start_offset = pdf_download.find(b'>>stream\n', uuid_placement_object_offset) + 9
-            flate_encoded_stream_end_offset = flate_encoded_stream_start_offset + flate_encoded_stream_integer_length - 1
-            flate_encoded_stream_content = pdf_download[
-                                           flate_encoded_stream_start_offset:flate_encoded_stream_end_offset + 1]
-            flate_encoded_stream_decoded_content = zlib.decompress(flate_encoded_stream_content, wbits=0)
-            if debug:
-                print('User UUID flate-encoded placement length string start offset is {}'.format(
-                    hex(length_string_start_offset)))
-                print('User UUID flate-encoded placement length string end offset is {}'.format(
-                    hex(length_string_end_offset)))
-                print('User UUID flate-encoded placement stream real integer value is {}'.format(
-                    flate_encoded_stream_integer_length))
-                print('User UUID flate-encoded placement stream start offset is {}'.format(
-                    hex(flate_encoded_stream_start_offset)))
-                print('User UUID flate-encoded placement stream end offset is {}'.format(
-                    hex(flate_encoded_stream_end_offset)))
-                print('User UUID flate-encoded placement stream content byte length is {}'.format(
-                    len(flate_encoded_stream_content)))
-                print('User UUID flate-encoded placement stream content is {}'.format(flate_encoded_stream_content))
-                print('User UUID flate-encoded placement decoded stream content is {}'.format(
-                    flate_encoded_stream_decoded_content))
-
-            if user_uuid_destroy:
-                if verbose:
-                    print('')
-                    print('Zeroing the user UUID flate-encoded placement stream data...')
-                flate_encoded_stream_replacement_content = bytes(
-                    '0'.encode(encoding='cp1252') * len(flate_encoded_stream_content))
+        if user_uuid_hide or user_uuid_destroy:
+            for uuid_opacity_object_location in uuid_opacity_object_location_list:
+                pdf_download[uuid_opacity_object_location:uuid_opacity_object_location + len(
+                    uuid_opacity_object_replacement_value)] = uuid_opacity_object_replacement_value
                 if debug:
-                    print('User UUID flate-encoded placement replacement stream content is: {}'.format(
-                        flate_encoded_stream_replacement_content))
-                pdf_download[
-                flate_encoded_stream_start_offset:flate_encoded_stream_end_offset + 1] = flate_encoded_stream_replacement_content
+                    print('New UUID opacity object value written to the PDF file is: {}'.format(pdf_download[
+                                                                                                uuid_opacity_object_location:uuid_opacity_object_location + len(
+                                                                                                    uuid_opacity_object_replacement_value)]))
 
         if verbose:
+            print()
             print('Finished editing the downloaded PDF file')
 
         # Save the PDF download
