@@ -114,29 +114,26 @@ Notes:
 
 """
 
+import binascii
 import os.path
+import random
 import re
 import uuid
 import zlib
 from contextlib import contextmanager
+from datetime import datetime, timedelta
+from io import BytesIO
 from time import sleep
 from urllib.error import HTTPError
 from urllib.parse import urlparse, urlunparse
 from urllib.request import urlopen
 
-import binascii
-import docopt
 import PIL
-from io import BytesIO
-from datetime import datetime
-from datetime import timedelta
-import random
-
+import docopt
 import requests as requests
 from PIL import Image
-from PIL import UnidentifiedImageError
-from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
+from reportlab.pdfgen import canvas
 
 # The pattern of the URL path for a magazine
 URL_PATH_PATTERN = re.compile(
@@ -169,6 +166,7 @@ QUALITY_PATTERN = re.compile("(extralow|low|mid|high|original)")
 # The pattern for a standard UUID, used to identify storage blobs, magazines and users
 UUID_PATTERN = re.compile("^[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}$")
 
+
 @contextmanager
 def saving(thing):
     """Context manager which ensures save() is called on thing."""
@@ -196,7 +194,7 @@ def main():
     user_uuid_hide = bool(opts['--uuid-hide'])
     user_uuid_destroy = bool(opts['--uuid-destroy'])
     timestamp_change = bool(opts['--timestamp-change'])
-    verbose = not(bool(opts['--quiet']))
+    verbose = not (bool(opts['--quiet']))
     debug = bool(opts['--debug'])
 
     m = URL_PATH_PATTERN.match(url.path)
@@ -321,7 +319,8 @@ def main():
                             try:
                                 im = Image.open(imgdata)
                             except PIL.UnidentifiedImageError as uie:
-                                print("Error: Page", page_num, "is not a valid image file. Unable to continue; exiting...")
+                                print('Error: Page {} is not a valid image file. Unable to continue; exiting...'.format(
+                                    page_num))
                                 break
 
                 except HTTPError as e:
@@ -334,7 +333,8 @@ def main():
                 w, h = tuple(dim / dpi for dim in im.size)
 
                 if verbose:
-                    print('Image is {} x {} pixels and {:.2f}in x {:.2f}in at {} DPI'.format(im.width, im.height, w, h, dpi))
+                    print('Image is {} x {} pixels and {:.2f}in x {:.2f}in at {} DPI'.format(im.width, im.height,
+                                                                                             w, h, dpi))
                 c.setPageSize((w * inch, h * inch))
                 c.drawInlineImage(im, 0, 0, w * inch, h * inch)
                 c.showPage()
@@ -418,10 +418,14 @@ def main():
         if last_good_page < range_to:
             range_to = last_good_page
             if verbose:
-                print('Downloading the magazine from page {} to the end of the magazine on page {}'.format(range_from, range_to, last_good_page))
+                print('Downloading the magazine from page {} to the end of the magazine on page {}'.format(range_from,
+                                                                                                           range_to,
+                                                                                                           last_good_page))
         else:
             if verbose:
-                print('Downloading the magazine from page {} to page {} instead of to the end of the magazine on page {}'.format(range_from, range_to, last_good_page))
+                print(
+                    'Downloading the magazine from page {} to page {} instead of to the end of the magazine on page {}'.format(
+                        range_from, range_to, last_good_page))
 
         # Add the required number of pages to the post_request_data
         index_number = 0
@@ -497,8 +501,9 @@ def main():
             uuid_stream_object_temp_counter = 0
             for uuid_stream_object_offset in uuid_stream_object_list:
                 uuid_stream_object_temp_counter += 1
-                print('{}: User UUID flate-encoded stream object found at offset {}'.format(uuid_stream_object_temp_counter,
-                                                                          hex(uuid_stream_object_offset)))
+                print('{}: User UUID flate-encoded stream object found at offset {}'.format(
+                    uuid_stream_object_temp_counter,
+                    hex(uuid_stream_object_offset)))
 
         # Decode the flate-encoded objects containing the User UUID objects out of curiosity
         if debug:
@@ -605,8 +610,7 @@ def main():
         itextsharp_object_creationdate_property_original_value = pdf_download[
                                                                  itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag:
                                                                  itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag + timestamp_length].decode(encoding='cp1252')
-        itextsharp_object_creationdate_property_replacement_value = time_replacement.strftime('%Y%m%d%H%M%S').encode(
-            encoding='cp1252')
+        itextsharp_object_creationdate_property_replacement_value = time_replacement.strftime('%Y%m%d%H%M%S').encode(encoding='cp1252')
         itextsharp_object_moddate_property_original_value = pdf_download[
                                                             itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag:
                                                             itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag + timestamp_length].decode(encoding='cp1252')
