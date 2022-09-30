@@ -46,11 +46,10 @@ Options:
                                 between downloading each individual page for all quality settings except 'original'.
                                 [default: 0]
 
-    --save-images=SAVE-IMAGES   Save the downloaded JPEG images of the magazine pages to a subdirectory with the same
+    --save-images               Save the downloaded JPEG images of the magazine pages to a subdirectory with the same
                                 name as the magazine in addition to generating the PDF of the magazine.
                                 Not used with '--quality=original'.
-                                Choose from yes or no.
-                                [default: no]
+                                [default: False]
 
     --image-subdir-prefix=PFX   If --save-images=yes then prefix name of the subdirectory the images are saved to with
                                 this string. Blank by default. (Optional)
@@ -189,7 +188,7 @@ def main():
     range_from = int(opts['--range-from'])
     range_to = int(opts['--range-to'])
     delay = float(opts['--delay'])
-    save_images = str(opts['--save-images'])
+    save_images = bool(opts['--save-images'])
     image_subdir_prefix = str(opts['--image-subdir-prefix'])
     image_subdir_suffix = str(opts['--image-subdir-suffix'])
     user_uuid = str(opts['--uuid'])
@@ -247,14 +246,8 @@ def main():
         raise RuntimeError(
             "Error setting the delay between page downloads. The value of --delay= must be not be less than zero.")
 
-    # Check save_images value
-    save_images = save_images.lower()
-    if save_images != 'yes' and save_images != 'no':
-        raise RuntimeError(
-            "Error setting the behaviour of saving images. The value of --save-images= must be either yes or no.")
-
     # Warn that save_images is not compatible with 'original' quality
-    if save_images == 'yes' and quality == 'original':
+    if save_images == True and quality == 'original':
         raise RuntimeError("Error: cannot save images when quality is set to 'original'.")
 
     # Check that a UUID option is provided with '--quality=original'
@@ -281,7 +274,7 @@ def main():
     print('Quality is {}'.format(quality))
     print(range_text)
     print('Delay between downloading each page is {} seconds'.format(delay))
-    print('Saving images is {}'.format(save_images))
+    print('Saving images is {}'.format(str(save_images).lower()))
     print('User UUID is {}'.format(user_uuid))
     print('Randomise User UUID is {}'.format(str(user_uuid_randomise).lower()))
     print('Hide User UUID is {}'.format(str(user_uuid_hide).lower()))
@@ -297,7 +290,7 @@ def main():
         with saving(c):
 
             # create directory to hold magazine images, if required
-            if save_images == 'yes':
+            if save_images:
                 (pdf_parent_dir_name, pdf_filename) = os.path.split(os.path.abspath(pdf_fn))
                 (image_subdir_name, extension) = os.path.splitext(pdf_filename)
                 image_subdir_name = image_subdir_prefix + image_subdir_name + image_subdir_suffix
@@ -345,7 +338,7 @@ def main():
                 c.setPageSize((w * inch, h * inch))
                 c.drawInlineImage(im, 0, 0, w * inch, h * inch)
                 c.showPage()
-                if save_images == 'yes':
+                if save_images:
                     # Save in "human-ranged" format - starting the page count from 1, not 0.
                     image_name = '{:04d}.jpg'.format(page_num + 1)
                     image_path = os.path.join(image_subdir_path, image_name)
@@ -425,7 +418,7 @@ def main():
         if last_good_page < range_to:
             range_to = last_good_page
             if verbose:
-                print('Downloading the magazine from page {} to the end of the magazine on page {})'.format(range_from, range_to, last_good_page))
+                print('Downloading the magazine from page {} to the end of the magazine on page {}'.format(range_from, range_to, last_good_page))
         else:
             if verbose:
                 print('Downloading the magazine from page {} to page {} instead of to the end of the magazine on page {}'.format(range_from, range_to, last_good_page))
@@ -445,6 +438,7 @@ def main():
         if pdf_response.status_code == 200:
             if verbose:
                 print('Success: Downloaded magazine')
+                print('Editing downloaded magazine...')
         else:
             print('Error: Unable to download magazine: HTTP error code {}'.format(pdf_response.status_code))
             exit(1)
@@ -463,7 +457,7 @@ def main():
         # There should be twice as many '<</Length' objects as pages in the magazine.
         start_of_magazine_content_location = -1
         if verbose:
-            print('Searching for the first object containing magazine content...')
+            print('Searching the PDF for the magazine content...')
         # Find the short/long pairs of flate-encoded stream objects that hold the position and text of the user UUID watermark on each page
         if verbose:
             print()
@@ -487,7 +481,7 @@ def main():
                 start_of_magazine_content_location = pdf_download.find(b'>>', next_object_location) + 1
                 break
         if len(uuid_stream_object_list) == number_of_pages * 2:
-            if verbose:
+            if debug:
                 print('Found the expected number of flate-encoded User UUID stream objects')
                 print(
                     'The number of User UUID stream objects ({}) is twice then number of pages ({}). This is correct.'.format(
@@ -618,6 +612,8 @@ def main():
                                                             itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag + timestamp_length].decode(encoding='cp1252')
         itextsharp_object_moddate_property_replacement_value = time_replacement.strftime('%Y%m%d%H%M%S').encode(encoding='cp1252')
         if timestamp_change:
+            if verbose:
+                print('Changing the PDFs internal timestamps...')
             pdf_download[
             itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag:
             itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag + len(
@@ -672,7 +668,7 @@ def main():
             print('         UUID Opacity objects found: {}, pages expected: {}'.format(
                 len(uuid_opacity_object_location_list), number_of_pages))
         else:
-            if verbose:
+            if debug:
                 print(
                     'Number of UUID opacity objects found ({}) equals the number of pages expected ({}). This is good.'.format(
                         len(uuid_opacity_object_location_list), number_of_pages))
@@ -696,6 +692,8 @@ def main():
         if user_uuid_destroy:
             uuid_opacity_object_replacement_value = b'0000000000000000000'
         if user_uuid_hide or user_uuid_destroy:
+            if verbose:
+                print('Changing the User UUID watermark opacity...')
             for uuid_opacity_object_location in uuid_opacity_object_location_list:
                 pdf_download[uuid_opacity_object_location:uuid_opacity_object_location + len(
                     uuid_opacity_object_replacement_value)] = uuid_opacity_object_replacement_value
