@@ -127,6 +127,7 @@ from time import sleep
 from urllib.error import HTTPError
 from urllib.parse import urlparse, urlunparse
 from urllib.request import urlopen
+import logging
 
 import PIL
 import docopt
@@ -134,6 +135,13 @@ import requests as requests
 from PIL import Image
 from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
+
+LOGGER = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+)
+
 
 # The pattern of the URL path for a magazine
 URL_PATH_PATTERN = re.compile(
@@ -194,8 +202,18 @@ def main():
     user_uuid_hide = bool(opts['--uuid-hide'])
     user_uuid_destroy = bool(opts['--uuid-destroy'])
     timestamp_change = bool(opts['--timestamp-change'])
-    verbose = not (bool(opts['--quiet']))
+    quiet = bool(opts['--quiet'])
     debug = bool(opts['--debug'])
+
+    if quiet:
+        LOGGER.setLevel(level=logging.WARNING)
+
+    # Check if both quiet output and debug output options are specified. Debug overrides quiet
+    if quiet is True and debug is True:
+        LOGGER.warning('Specifying both \'--quiet\' and \'--debug\' is contradictory. Debug output setting will override quiet output setting.')
+
+    if debug:
+        LOGGER.setLevel(level=logging.DEBUG)
 
     m = URL_PATH_PATTERN.match(url.path)
     if not m:
@@ -246,12 +264,12 @@ def main():
 
     # Warn that save_images is not compatible with 'original' quality
     if save_images == True and quality == 'original':
-        raise RuntimeError("Error: cannot save images when quality is set to 'original'.")
+        raise RuntimeError("Cannot save images when quality is set to 'original'.")
 
     # Check that a UUID option is provided with '--quality=original'
     if quality == 'original':
         if user_uuid == 'None' and user_uuid_randomise is False:
-            print('Error: if \'--quality=original\' is used, EITHER --uuid=UUID OR --uuid-randomise MUST be present.')
+            LOGGER.error('If \'--quality=original\' is used, EITHER --uuid=UUID OR --uuid-randomise MUST be present.')
             exit(1)
         if user_uuid != 'None':
             if not UUID_PATTERN.match(user_uuid):
@@ -259,28 +277,22 @@ def main():
         if user_uuid_randomise == True:
             user_uuid = str(uuid.uuid4())
 
-    # Check if both quiet output and debug output options are specified. Debug overrides quiet
-    if verbose is False and debug is True:
-        print('Warning: Specifying both \'--quiet\' and \'--debug\' is contradictory. Debug output setting will override quiet output setting.')
-        verbose = True
-
-    print('URL is {}'.format(url.geturl()))
-    print('File is {}'.format(pdf_fn))
-    print('Storage bucket UUID is {}'.format(bucket_uuid))
-    print('Magazine UUID is {}'.format(magazine_uuid))
-    print('DPI is {}'.format(dpi))
-    print('Quality is {}'.format(quality))
-    print(range_text)
-    print('Delay between downloading each page is {} seconds'.format(delay))
-    print('Saving images is {}'.format(str(save_images).lower()))
-    print('User UUID is {}'.format(user_uuid))
-    print('Randomise User UUID is {}'.format(str(user_uuid_randomise).lower()))
-    print('Hide User UUID is {}'.format(str(user_uuid_hide).lower()))
-    print('Destroy User UUID is {}'.format(str(user_uuid_destroy).lower()))
-    print('Change timestamp is {}'.format(str(timestamp_change).lower()))
-    print('Quiet output is {}'.format(str(not verbose).lower()))
-    print('Debug output is {}'.format(str(debug).lower()))
-    print()
+    LOGGER.info('URL is {}'.format(url.geturl()))
+    LOGGER.info('File is {}'.format(pdf_fn))
+    LOGGER.info('Storage bucket UUID is {}'.format(bucket_uuid))
+    LOGGER.info('Magazine UUID is {}'.format(magazine_uuid))
+    LOGGER.info('DPI is {}'.format(dpi))
+    LOGGER.info('Quality is {}'.format(quality))
+    LOGGER.info(range_text)
+    LOGGER.info('Delay between downloading each page is {} seconds'.format(delay))
+    LOGGER.info('Saving images is {}'.format(str(save_images).lower()))
+    LOGGER.info('User UUID is {}'.format(user_uuid))
+    LOGGER.info('Randomise User UUID is {}'.format(str(user_uuid_randomise).lower()))
+    LOGGER.info('Hide User UUID is {}'.format(str(user_uuid_hide).lower()))
+    LOGGER.info('Destroy User UUID is {}'.format(str(user_uuid_destroy).lower()))
+    LOGGER.info('Change timestamp is {}'.format(str(timestamp_change).lower()))
+    LOGGER.info('Quiet output is {}'.format(str(quiet).lower()))
+    LOGGER.info('Debug output is {}'.format(str(debug).lower()))
 
     if quality != 'original':
         c = canvas.Canvas(pdf_fn)
@@ -305,8 +317,8 @@ def main():
 
                 try:
                     with urlopen(page_url) as f:
-                        if verbose:
-                            print('Downloading page {} from {}...'.format(page_num + 1, page_url))
+                        LOGGER.info('Downloading page {} from {}...'.format(page_num + 1, page_url))
+
                         # if: the extralow, low & mid quality "jpg" format URLs
                         if quality == 'extralow' or quality == 'low' or quality == 'mid':
                             im = Image.open(f)
@@ -319,21 +331,19 @@ def main():
                             try:
                                 im = Image.open(imgdata)
                             except PIL.UnidentifiedImageError as uie:
-                                print('Error: Page {} is not a valid image file. Unable to continue; exiting...'.format(
+                                LOGGER.error('Page {} is not a valid image file. Unable to continue; exiting...'.format(
                                     page_num))
                                 break
 
                 except HTTPError as e:
                     if e.code == 404:
-                        if verbose:
-                            print('No image found => stopping')
+                        LOGGER.info('No image found => stopping')
                         break
                     raise e
 
                 w, h = tuple(dim / dpi for dim in im.size)
 
-                if verbose:
-                    print('Image is {} x {} pixels and {:.2f}in x {:.2f}in at {} DPI'.format(im.width, im.height,
+                LOGGER.info('Image is {} x {} pixels and {:.2f}in x {:.2f}in at {} DPI'.format(im.width, im.height,
                                                                                              w, h, dpi))
                 c.setPageSize((w * inch, h * inch))
                 c.drawInlineImage(im, 0, 0, w * inch, h * inch)
@@ -347,8 +357,7 @@ def main():
 
     # else quality == 'original'
     else:
-        if verbose:
-            print("Downloading magazine as the original PDF")
+        LOGGER.info("Downloading magazine as the original PDF")
         post_request_url = 'http://readerv2.pocketmags.com/PrintPage'
         post_request_headers = {
             "Content-Type": "application/x-www-form-urlencoded",
@@ -363,8 +372,7 @@ def main():
             "user": user_uuid,
         }
 
-        if verbose:
-            print('Determining the page number of the end of the magazine')
+        LOGGER.info('Determining the page number of the end of the magazine')
         # Check the range_to value exists as a magazine page (as the default is 999)
         # by checking the extralow JPG for the page exists. Need HTTP response 200, not 404.
         # Jumps between pages in 20,10,5,2,1 page intervals to avoid having to check everysingle page.
@@ -386,9 +394,8 @@ def main():
             if jpeg_exists_response.status_code == 200:
                 last_good_page = page_num
                 if last_good_page + 1 == last_bad_page:
-                    if verbose:
-                        # Output as human-readable page numbers (counting from 1 not 0)
-                        print("Page {} is the last good page".format(last_good_page + 1))
+                    # Output as human-readable page numbers (counting from 1 not 0)
+                    LOGGER.info("Page {} is the last good page".format(last_good_page + 1))
                     break
                 page_num += page_jump
             elif jpeg_exists_response.status_code == 404:
@@ -401,50 +408,44 @@ def main():
                 if page_num < 0:
                     page_num = 0
                 if bad_page_count == bad_page_limit:
-                    raise RuntimeError("Error: Cannot find any valid page numbers, exiting...")
+                    raise RuntimeError("Cannot find any valid page numbers, exiting...")
             else:
                 raise RuntimeError(
-                    "Error: Unexpected HTTP error code encountered while probing for the last page in the magazine: HTTP error {}".format(
+                    "Unexpected HTTP error code encountered while probing for the last page in the magazine: HTTP error {}".format(
                         jpeg_exists_response.status_code))
-            if debug:
-                print("HTTP response code {} for URL {}".format(jpeg_exists_response.status_code, jpeg_url))
-                print("Last good page number: {}, last bad page number: {}".format(last_good_page, last_bad_page))
-                print("Page jump value is {}".format(page_jump))
-                print("Next page to be queried is {}".format(page_num))
+            
+            LOGGER.debug("HTTP response code {} for URL {}".format(jpeg_exists_response.status_code, jpeg_url))
+            LOGGER.debug("Last good page number: {}, last bad page number: {}".format(last_good_page, last_bad_page))
+            LOGGER.debug("Page jump value is {}".format(page_jump))
+            LOGGER.debug("Next page to be queried is {}".format(page_num))
 
         # Determine if magazine is to be downloaded to the end or an earlier user-specified page number
         # Convert last_good_page to human-readable form, the same form as the range_to variable.
         last_good_page = last_good_page + 1
         if last_good_page < range_to:
             range_to = last_good_page
-            if verbose:
-                print('Downloading the magazine from page {} to the end of the magazine on page {}'.format(range_from,
+            LOGGER.info('Downloading the magazine from page {} to the end of the magazine on page {}'.format(range_from,
                                                                                                            range_to,
                                                                                                            last_good_page))
         else:
-            if verbose:
-                print(
-                    'Downloading the magazine from page {} to page {} instead of to the end of the magazine on page {}'.format(
-                        range_from, range_to, last_good_page))
+            LOGGER.info(
+                'Downloading the magazine from page {} to page {} instead of to the end of the magazine on page {}'.format(
+                    range_from, range_to, last_good_page))
 
         # Add the required number of pages to the post_request_data
-        index_number = 0
         for page_num in range(range_from - 1, range_to):
-            post_request_data["pages[{}]".format(index_number)] = page_num
-            index_number += 1
-        if debug:
-            print()
-            print('Post request data to be sent is:')
-            print(post_request_data)
+            post_request_data["pages[{}]".format(page_num)] = page_num
+        
+        LOGGER.debug('Post request data to be sent is:')
+        LOGGER.debug(post_request_data)
 
         pdf_response = requests.post(url=post_request_url, data=post_request_data, headers=post_request_headers)
 
         if pdf_response.status_code == 200:
-            if verbose:
-                print('Success: Downloaded magazine')
-                print('Editing downloaded magazine...')
+            LOGGER.info('Success: Downloaded magazine')
+            LOGGER.info('Editing downloaded magazine...')
         else:
-            print('Error: Unable to download magazine: HTTP error code {}'.format(pdf_response.status_code))
+            LOGGER.error('Unable to download magazine: HTTP error code {}'.format(pdf_response.status_code))
             exit(1)
 
         pdf_download = bytearray(pdf_response.content)
@@ -460,12 +461,9 @@ def main():
         # '<</ArtBox...' or something else that signifies the start of the magazine content.
         # There should be twice as many '<</Length' objects as pages in the magazine.
         start_of_magazine_content_location = -1
-        if verbose:
-            print('Searching the PDF for the magazine content...')
+        LOGGER.info('Searching the PDF for the magazine content...')
         # Find the short/long pairs of flate-encoded stream objects that hold the position and text of the user UUID watermark on each page
-        if verbose:
-            print()
-            print('Searching for the flate-encoded stream objects containing the User UUID watermark...')
+        LOGGER.info('Searching for the flate-encoded stream objects containing the User UUID watermark...')
         length_string = '<</Length '
         next_object_string = length_string
         # Quick and dirty way to get to the approximate location to start searching
@@ -485,30 +483,26 @@ def main():
                 start_of_magazine_content_location = pdf_download.find(b'>>', next_object_location) + 1
                 break
         if len(uuid_stream_object_list) == number_of_pages * 2:
-            if debug:
-                print('Found the expected number of flate-encoded User UUID stream objects')
-                print(
-                    'The number of User UUID stream objects ({}) is twice then number of pages ({}). This is correct.'.format(
-                        len(uuid_stream_object_list), number_of_pages))
+            LOGGER.debug('Found the expected number of flate-encoded User UUID stream objects')
+            LOGGER.debug(
+                'The number of User UUID stream objects ({}) is twice then number of pages ({}). This is correct.'.format(
+                    len(uuid_stream_object_list), number_of_pages))
         else:
-            print(
-                'Warning: The number of User UUID stream objects ({}) should be twice then number of pages ({}). It is not.'.format(
+            LOGGER.warning(
+                'The number of User UUID stream objects ({}) should be twice then number of pages ({}). It is not.'.format(
                     len(uuid_stream_object_list), number_of_pages))
 
         # Print summary of all User UUID stream objects found
         if debug:
-            print()
             uuid_stream_object_temp_counter = 0
             for uuid_stream_object_offset in uuid_stream_object_list:
                 uuid_stream_object_temp_counter += 1
-                print('{}: User UUID flate-encoded stream object found at offset {}'.format(
+                LOGGER.debug('{}: User UUID flate-encoded stream object found at offset {}'.format(
                     uuid_stream_object_temp_counter,
                     hex(uuid_stream_object_offset)))
 
         # Decode the flate-encoded objects containing the User UUID objects out of curiosity
-        if debug:
-            print()
-            print('Decoding the previously discovered flate-encoded objects containing the User UUID watermarks...')
+        LOGGER.debug('Decoding the previously discovered flate-encoded objects containing the User UUID watermarks...')
         # for uuid_object_location in uuid_placement_object_location_list:
         uuid_object_counter = 0
         for uuid_object_location in uuid_stream_object_list:
@@ -521,34 +515,29 @@ def main():
             flate_encoded_stream_content = pdf_download[
                                            flate_encoded_stream_start_offset:flate_encoded_stream_end_offset + 1]
             flate_encoded_stream_decoded_content = zlib.decompress(flate_encoded_stream_content, wbits=0)
-            if debug:
-                print()
-                print('Working on User UUID flate-encoded stream number {}'.format(uuid_object_counter + 1))
-                print('User UUID flate-encoded placement length string start offset is {}'.format(
-                    hex(length_string_start_offset)))
-                print('User UUID flate-encoded placement length string end offset is {}'.format(
-                    hex(length_string_end_offset)))
-                print('User UUID flate-encoded placement stream real integer value is {}'.format(
-                    flate_encoded_stream_integer_length))
-                print('User UUID flate-encoded placement stream start offset is {}'.format(
-                    hex(flate_encoded_stream_start_offset)))
-                print('User UUID flate-encoded placement stream end offset is {}'.format(
-                    hex(flate_encoded_stream_end_offset)))
-                print('User UUID flate-encoded placement stream content byte length is {}'.format(
-                    len(flate_encoded_stream_content)))
-                print('User UUID flate-encoded placement stream content is {}'.format(flate_encoded_stream_content))
-                print('User UUID flate-encoded placement decoded stream content is {}'.format(
-                    flate_encoded_stream_decoded_content))
+            LOGGER.debug('Working on User UUID flate-encoded stream number {}'.format(uuid_object_counter + 1))
+            LOGGER.debug('User UUID flate-encoded placement length string start offset is {}'.format(
+                hex(length_string_start_offset)))
+            LOGGER.debug('User UUID flate-encoded placement length string end offset is {}'.format(
+                hex(length_string_end_offset)))
+            LOGGER.debug('User UUID flate-encoded placement stream real integer value is {}'.format(
+                flate_encoded_stream_integer_length))
+            LOGGER.debug('User UUID flate-encoded placement stream start offset is {}'.format(
+                hex(flate_encoded_stream_start_offset)))
+            LOGGER.debug('User UUID flate-encoded placement stream end offset is {}'.format(
+                hex(flate_encoded_stream_end_offset)))
+            LOGGER.debug('User UUID flate-encoded placement stream content byte length is {}'.format(
+                len(flate_encoded_stream_content)))
+            LOGGER.debug('User UUID flate-encoded placement stream content is {}'.format(flate_encoded_stream_content))
+            LOGGER.debug('User UUID flate-encoded placement decoded stream content is {}'.format(
+                flate_encoded_stream_decoded_content))
 
             if user_uuid_destroy:
-                if verbose:
-                    print('')
-                    print('Zeroing the user UUID flate-encoded placement stream data...')
+                LOGGER.info('Zeroing the user UUID flate-encoded placement stream data...')
                 flate_encoded_stream_replacement_content = bytes(
                     '0'.encode(encoding='cp1252') * len(flate_encoded_stream_content))
-                if debug:
-                    print('User UUID flate-encoded placement replacement stream content is: {}'.format(
-                        flate_encoded_stream_replacement_content))
+                LOGGER.debug('User UUID flate-encoded placement replacement stream content is: {}'.format(
+                    flate_encoded_stream_replacement_content))
                 pdf_download[
                 flate_encoded_stream_start_offset:flate_encoded_stream_end_offset + 1] = flate_encoded_stream_replacement_content
             uuid_object_counter += 1
@@ -556,41 +545,36 @@ def main():
         # The software that Pocketmags use to add the User UUID watermarks is called iTextSharp and it adds its own
         # object near the beginning of the PDF in order to advertise itself and add two timestamps.
         # Find the location of the iTextSharp object that includes the two timestamps
-        if verbose:
-            print()
-            print('Searching for the iTextSharp object and associated properties...')
+        LOGGER.info('Searching for the iTextSharp object and associated properties...')
         itextsharp_object_location = pdf_download.find(b'<</Producer(iTextSharp', 0, start_of_magazine_content_location)
         itextsharp_object_end_location = -1
         itextsharp_object_creationdate_property_location = -1
         itextsharp_object_moddate_property_location = -1
         if itextsharp_object_location == -1:
-            print('Warning: cannot find the iTextSharp object location in the PDF file.')
+            LOGGER.warning('Cannot find the iTextSharp object location in the PDF file.')
         else:
             # Find the next 'endobj' tag after the iTextSharp object hast started in order to limit the search range for
             # the two timestamps that should be associated with it.
             itextsharp_object_end_location = pdf_download.find(b'endobj', itextsharp_object_location)
-            if debug:
-                print('Byte offset of the iTextSharp object located at {}'.format(hex(itextsharp_object_location)))
+            LOGGER.debug('Byte offset of the iTextSharp object located at {}'.format(hex(itextsharp_object_location)))
 
             # Find the CreationDate timestamp property location
             itextsharp_object_creationdate_property_location = pdf_download.find(b'CreationDate',
                                                                                  itextsharp_object_location,
                                                                                  itextsharp_object_end_location)
             if itextsharp_object_creationdate_property_location == -1:
-                print('Warning: cannot find the iTextSharp object\'s CreationDate property.')
+                LOGGER.warning('Cannot find the iTextSharp object\'s CreationDate property.')
             else:
-                if debug:
-                    print('Byte offset of the iTextSharp object\'s CreationDate property is {}'.format(
-                        hex(itextsharp_object_creationdate_property_location)))
+                LOGGER.debug('Byte offset of the iTextSharp object\'s CreationDate property is {}'.format(
+                    hex(itextsharp_object_creationdate_property_location)))
             # Find the ModDate timestamp property location
             itextsharp_object_moddate_property_location = pdf_download.find(b'ModDate', itextsharp_object_location,
                                                                             itextsharp_object_end_location)
             if itextsharp_object_moddate_property_location == -1:
-                print('Warning: cannot find the iTextSharp object\'s ModDate property.')
+                LOGGER.warning('Cannot find the iTextSharp object\'s ModDate property.')
             else:
-                if debug:
-                    print('Byte offset of the iTextSharp object\'s ModDate property is {}'.format(
-                        hex(itextsharp_object_moddate_property_location)))
+                LOGGER.debug('Byte offset of the iTextSharp object\'s ModDate property is {}'.format(
+                    hex(itextsharp_object_moddate_property_location)))
 
         # Create new timestamps for the iTextSharp object CreationDate and ModDate properties
         # Timestamps need to be 14 char YYYYmmddHHMMSS format.
@@ -616,8 +600,7 @@ def main():
                                                             itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag + timestamp_length].decode(encoding='cp1252')
         itextsharp_object_moddate_property_replacement_value = time_replacement.strftime('%Y%m%d%H%M%S').encode(encoding='cp1252')
         if timestamp_change:
-            if verbose:
-                print('Changing the PDFs internal timestamps...')
+            LOGGER.info('Changing the PDFs internal timestamps...')
             pdf_download[
             itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag:
             itextsharp_object_creationdate_property_location + creationdate_date_offset_from_property_tag + len(
@@ -626,30 +609,28 @@ def main():
             itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag:
             itextsharp_object_moddate_property_location + moddate_date_offset_from_property_tag + len(
                 itextsharp_object_moddate_property_replacement_value)] = itextsharp_object_moddate_property_replacement_value
-        if debug:
-            print('Original iTextSharp CreationDate timestamp is {}, length {}'.format(
-                itextsharp_object_creationdate_property_original_value,
-                len(itextsharp_object_creationdate_property_original_value)))
-            if timestamp_change:
-                print('Replacement iTextSharp CreationDate timestamp is {}, length {}'.format(
-                    itextsharp_object_creationdate_property_replacement_value,
-                    len(itextsharp_object_creationdate_property_replacement_value)))
-            print('Original iTextSharp ModDate timestamp is {}, length {}'.format(
-                itextsharp_object_moddate_property_original_value,
-                len(itextsharp_object_moddate_property_original_value)))
-            if timestamp_change:
-                print('Replacement iTextSharp ModDate timestamp is {}, length {}'.format(
-                    itextsharp_object_moddate_property_replacement_value,
-                    len(itextsharp_object_moddate_property_replacement_value)))
-            print('iTextSharp object before timestamp modification is: {}'.format(itextsharp_object_original_content))
-            if timestamp_change:
-                print('iTextSharp object after  timestamp modification is: {}'.format(
-                    pdf_download[itextsharp_object_location:itextsharp_object_end_location]))
+        
+        LOGGER.debug('Original iTextSharp CreationDate timestamp is {}, length {}'.format(
+            itextsharp_object_creationdate_property_original_value,
+            len(itextsharp_object_creationdate_property_original_value)))
+        if timestamp_change:
+            LOGGER.debug('Replacement iTextSharp CreationDate timestamp is {}, length {}'.format(
+                itextsharp_object_creationdate_property_replacement_value,
+                len(itextsharp_object_creationdate_property_replacement_value)))
+        LOGGER.debug('Original iTextSharp ModDate timestamp is {}, length {}'.format(
+            itextsharp_object_moddate_property_original_value,
+            len(itextsharp_object_moddate_property_original_value)))
+        if timestamp_change:
+            LOGGER.debug('Replacement iTextSharp ModDate timestamp is {}, length {}'.format(
+                itextsharp_object_moddate_property_replacement_value,
+                len(itextsharp_object_moddate_property_replacement_value)))
+        LOGGER.debug('iTextSharp object before timestamp modification is: {}'.format(itextsharp_object_original_content))
+        if timestamp_change:
+            LOGGER.debug('iTextSharp object after  timestamp modification is: {}'.format(
+                pdf_download[itextsharp_object_location:itextsharp_object_end_location]))
 
         # Find the locations of all the UUID opacity objects
-        if verbose:
-            print()
-            print("Searching for user UUID opacity objects...")
+        LOGGER.info("Searching for user UUID opacity objects...")
         uuid_opacity_object_original_value = b'<</ca 0.35/CA 0.3>>'
         uuid_opacity_object_location_list = list()
         uuid_opacity_object_last_location_found = -1
@@ -668,25 +649,22 @@ def main():
 
         # Check the number of UUID opacity objects found matches the number of pages expected in the magazine
         if len(uuid_opacity_object_location_list) != number_of_pages:
-            print('Warning: The number of UUID opacity objects found does not equal the number of pages expected:')
-            print('         UUID Opacity objects found: {}, pages expected: {}'.format(
+            LOGGER.warning('The number of UUID opacity objects found does not equal the number of pages expected:')
+            LOGGER.warning('         UUID Opacity objects found: {}, pages expected: {}'.format(
                 len(uuid_opacity_object_location_list), number_of_pages))
         else:
-            if debug:
-                print(
-                    'Number of UUID opacity objects found ({}) equals the number of pages expected ({}). This is good.'.format(
-                        len(uuid_opacity_object_location_list), number_of_pages))
+            LOGGER.debug(
+                'Number of UUID opacity objects found ({}) equals the number of pages expected ({}). This is good.'.format(
+                    len(uuid_opacity_object_location_list), number_of_pages))
 
         # Print summary of all user UUID opacity objects found
         if debug:
             uuid_opacity_object_temp_counter = 0
             for uuid_opacity_object_offset in uuid_opacity_object_location_list:
                 uuid_opacity_object_temp_counter += 1
-                print('{}: UUID opacity object found at offset {}'.format(uuid_opacity_object_temp_counter,
+                LOGGER.debug('{}: UUID opacity object found at offset {}'.format(uuid_opacity_object_temp_counter,
                                                                           hex(uuid_opacity_object_offset)))
 
-        if debug:
-            print()
         # Modify user UUID opacity objects to make the UUID less visible
         # ca = fill (non-stroking), CA = border (stroking)
         # NB: Do NOT change the length of the uuid_opacity_object_replacement_value string!
@@ -696,26 +674,21 @@ def main():
         if user_uuid_destroy:
             uuid_opacity_object_replacement_value = b'0000000000000000000'
         if user_uuid_hide or user_uuid_destroy:
-            if verbose:
-                print('Changing the User UUID watermark opacity...')
+            LOGGER.info('Changing the User UUID watermark opacity...')
             for uuid_opacity_object_location in uuid_opacity_object_location_list:
                 pdf_download[uuid_opacity_object_location:uuid_opacity_object_location + len(
                     uuid_opacity_object_replacement_value)] = uuid_opacity_object_replacement_value
-                if debug:
-                    print('New UUID opacity object value written to the PDF file is: {}'.format(pdf_download[
-                                                                                                uuid_opacity_object_location:uuid_opacity_object_location + len(
-                                                                                                    uuid_opacity_object_replacement_value)]))
+                LOGGER.debug('New UUID opacity object value written to the PDF file is: {}'.format(pdf_download[
+                                                                                            uuid_opacity_object_location:uuid_opacity_object_location + len(
+                                                                                                uuid_opacity_object_replacement_value)]))
 
-        if verbose:
-            print()
-            print('Finished editing the downloaded PDF file')
+        LOGGER.info('Finished editing the downloaded PDF file')
 
         # Save the PDF download
         # TODO: Check for any non-existent directories in the output file path and create them before saving the file.
         with open(pdf_fn, 'bw') as pdf_original:
             pdf_original.write(pdf_download)
-            if verbose:
-                print('Saved PDF download to {}'.format(pdf_fn))
+            LOGGER.info('Saved PDF download to {}'.format(pdf_fn))
 
 
 if __name__ == '__main__':
