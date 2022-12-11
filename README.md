@@ -6,8 +6,9 @@
 This is a modified version of the GitHub Gist called [pmdown.py](https://gist.github.com/rjw57/b9fbbd173d22aca42a80) written by the GitHub user [rjw57](https://github.com/rjw57). I would have contributed my changes to the original but alas it is only a Gist, not a GitHub Repository.
 
 With thanks to:
-- [rjw57](https://github.com/rjw57) for the original [pmdown.py](https://gist.github.com/rjw57/b9fbbd173d22aca42a80) Python script
+- [rjw57](https://github.com/rjw57) for the original [pmdown.py](https://gist.github.com/rjw57/b9fbbd173d22aca42a80) Python script.
 - [bani6809](https://github.com/bani6809) for revealing in the [comments](https://gist.github.com/rjw57/b9fbbd173d22aca42a80?permalink_comment_id=3779130#gistcomment-3779130) that the "high" quality image urls end in `bin` not `jpg`.
+- [shirblc](https://github.com/shirblc) for replacing my collection of Python `print` statements with proper Python logging.
 
 **NB:** I have only been able to test this on the small number of magazines I have purchased on [pocketmags.com](https://pocketmags.com)
 
