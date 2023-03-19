@@ -45,7 +45,7 @@ pocketmagstopdf.py [options] <pdf> <url>
 -h, --help                  Print brief usage summary.
 
 --quality=QUALITY           Set magazine download quality.
-                            Choose from extralow, low, mid, high or original. (Optional)
+                            Choose from extralow, low, mid, high, extrahigh or original. (Optional)
                             [default: mid]
 
 --dpi=DPI                   Set image resolution in dots per inch. (Optional)
@@ -124,7 +124,7 @@ pocketmagstopdf.py [options] <pdf> <url>
 
 ## Examples:
 ```
-pocketmagstopdf.py --quality=high --delay=2 --title="My Magazine, Issue 73, October 2022" my_magazine.pdf https://mcdatastore.blob.core.windows.net/mcmags/<STORAGE_BUCKET_UUID>/<ISSUE_UUID>/extralow/0000.jpg
+pocketmagstopdf.py --quality=extrahigh --delay=2 --title="My Magazine, Issue 73, October 2022" my_magazine.pdf https://mcdatastore.blob.core.windows.net/mcmags/<STORAGE_BUCKET_UUID>/<ISSUE_UUID>/extralow/0000.jpg
 
 pocketmagstopdf.py --quality=original --delay=0.5 --uuid-hide --uuid=<USER_UUID> my_magazine.pdf https://mcdatastore.blob.core.windows.net/mcmags/<STORAGE_BUCKET_UUID>/<ISSUE_UUID>/extralow/0000.jpg
 ```
