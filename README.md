@@ -7,7 +7,7 @@ This is a modified version of the GitHub Gist called [pmdown.py](https://gist.gi
 
 With thanks to:
 - [rjw57](https://github.com/rjw57) for the original [pmdown.py](https://gist.github.com/rjw57/b9fbbd173d22aca42a80) Python script.
-- [bani6809](https://github.com/bani6809) for revealing in the [comments](https://gist.github.com/rjw57/b9fbbd173d22aca42a80?permalink_comment_id=3779130#gistcomment-3779130) that the "high" quality image urls end in `bin` not `jpg`.
+- [bani6809](https://github.com/bani6809) for revealing in the [comments](https://gist.github.com/rjw57/b9fbbd173d22aca42a80?permalink_comment_id=3779130#gistcomment-3779130) that the "high" and "extrahigh" quality image urls end in `bin` not `jpg`.
 - [shirblc](https://github.com/shirblc) for replacing my collection of Python `print` statements with proper Python logging.
 
 **NB:** I have only been able to test this on the small number of magazines I have purchased on [pocketmags.com](https://pocketmags.com)
@@ -27,6 +27,10 @@ With thanks to:
   - No option given will present a normal level of informational output.
   - `--debug` prints comprehensive PDF-related information. 
 - Add the option to hide the User UUID watermark that is inserted on each page of the PDF when `--quality=original` is used.
+### 09/12/2022
+- Add proper Python Logger support (implemented by [shirblc](https://github.com/shirblc))
+### 19/03/2023
+- Add the option to enable downloading of magazines in the newly-discovered "extrahigh" quality format (only when `--quality=extrahigh` is used, otherwise the default is "mid").
 
 ## Usage:
 

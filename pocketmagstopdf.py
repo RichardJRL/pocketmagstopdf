@@ -19,7 +19,7 @@ Options:
     -h, --help                  Print brief usage summary.
 
     --quality=QUALITY           Set magazine download quality.
-                                Choose from extralow, low, mid, high or original. (Optional)
+                                Choose from extralow, low, mid, high, extrahigh or original. (Optional)
                                 [default: mid]
 
     --dpi=DPI                   Set image resolution in dots per inch. (Optional)
@@ -145,20 +145,44 @@ logging.basicConfig(
 
 # The pattern of the URL path for a magazine
 URL_PATH_PATTERN = re.compile(
-    r'(?P<prefix>^/mcmags/(?P<bucket_uuid>[a-f0-9\-]+)/(?P<magazine_uuid>[a-f0-9\-]+))/(?P<imagequality>(extralow|low|mid|high))/[0-9]{4}.(bin|jpg)')
+    r'(?P<prefix>^/mcmags/(?P<bucket_uuid>[a-f0-9\-]+)/(?P<magazine_uuid>[a-f0-9\-]+))/(?P<imagequality>(extralow|low|mid|high|extrahigh))/[0-9]{4}.(bin|jpg)')
 
-# Example URLs sampled 8 July 2022, deliberately using an advert from a magazine:
+# GitHub issue #7 reports extrahigh/0000.bin as a new quality level: https://github.com/RichardJRL/pocketmagstopdf/issues/7
+# But it does not exist for the (older) example magazine used here:
+
+# Older magazine: Example URLs sampled 8 July 2022, deliberately using an advert from a magazine:
 # https://mcdatastore.blob.core.windows.net/mcmags/f3786b15-4b19-456e-9b58-2af137a35bcd/ba9c5bcb-cf96-4215-a2f5-841ddb4a119c/extralow/0046.jpg
 # https://mcdatastore.blob.core.windows.net/mcmags/f3786b15-4b19-456e-9b58-2af137a35bcd/ba9c5bcb-cf96-4215-a2f5-841ddb4a119c/low/0046.jpg
 # https://mcdatastore.blob.core.windows.net/mcmags/f3786b15-4b19-456e-9b58-2af137a35bcd/ba9c5bcb-cf96-4215-a2f5-841ddb4a119c/mid/0046.jpg
 # https://mcdatastore.blob.core.windows.net/mcmags/f3786b15-4b19-456e-9b58-2af137a35bcd/ba9c5bcb-cf96-4215-a2f5-841ddb4a119c/high/0046.bin
-
-# Image Sizes (based upon the above URLs)
+# Image Sizes (based upon the above URLs for page 46)
 # extralow: 340  x 480
 # low:      362  x 512
 # mid:      905  x 1280
 # high:     1447 x 2048
-QUALITY_PATTERN = re.compile("(extralow|low|mid|high|original)")
+
+# Newer magazine: Example URLs sampled 17 March 2023, deliberately using an advert from a magazine:
+# extralow
+# https://mcdatastore.blob.core.windows.net/mcmags/6c4f9d70-3791-4cdb-8649-deb6d4b8bd29/c4d2c289-48ae-4bad-9a20-7eb0de6debf9/extralow/0084.jpg
+# https://mcdatastore.blob.core.windows.net/mcmags/6c4f9d70-3791-4cdb-8649-deb6d4b8bd29/c4d2c289-48ae-4bad-9a20-7eb0de6debf9/extralow/0084.bin
+# low
+# https://mcdatastore.blob.core.windows.net/mcmags/6c4f9d70-3791-4cdb-8649-deb6d4b8bd29/c4d2c289-48ae-4bad-9a20-7eb0de6debf9/low/0084.jpg
+# https://mcdatastore.blob.core.windows.net/mcmags/6c4f9d70-3791-4cdb-8649-deb6d4b8bd29/c4d2c289-48ae-4bad-9a20-7eb0de6debf9/low/0084.bin
+# mid
+# https://mcdatastore.blob.core.windows.net/mcmags/6c4f9d70-3791-4cdb-8649-deb6d4b8bd29/c4d2c289-48ae-4bad-9a20-7eb0de6debf9/mid/0084.jpg
+# https://mcdatastore.blob.core.windows.net/mcmags/6c4f9d70-3791-4cdb-8649-deb6d4b8bd29/c4d2c289-48ae-4bad-9a20-7eb0de6debf9/mid/0084.bin
+# high
+# https://mcdatastore.blob.core.windows.net/mcmags/6c4f9d70-3791-4cdb-8649-deb6d4b8bd29/c4d2c289-48ae-4bad-9a20-7eb0de6debf9/high/0084.bin
+# extrahigh
+# https://mcdatastore.blob.core.windows.net/mcmags/6c4f9d70-3791-4cdb-8649-deb6d4b8bd29/c4d2c289-48ae-4bad-9a20-7eb0de6debf9/extrahigh/0084.bin
+# Image Sizes (based upon the above URLs for page 84)
+# extralow: 340  x 480 (same for .bin and .jpg)
+# low:      362  x 512 (same for .bin and .jpg)
+# mid:      905  x 1280 (same for .bin and .jpg)
+# high:     1448 x 2048
+# extrahigh:2171 x 3072
+
+QUALITY_PATTERN = re.compile("(extralow|low|mid|high|extrahigh|original)")
 
 # Notes on the "high" image size with the "bin" file extension.
 # Running the Linux "file" command gives the output:
@@ -170,6 +194,24 @@ QUALITY_PATTERN = re.compile("(extralow|low|mid|high|original)")
 # bytes of the file were 0x0000 when for a "jpg" they should be 0xFFD8. The rest of the beginning of the file also
 # looked like what would be expected in a "jpg" header section. Editing the first two bytes of the "bin" file to
 # 0xFFD8 resulted in it opening in the Gwenview image viewer and showed it to have a resolution of 1447 x 2048.
+
+# Notes on the "extrahigh" image size with the "bin" file extension.
+# Running the Linux "file" command gives the output:
+# 0084extrahigh.bin: data
+
+# Inspecting the file with a hex editor (Okteta) revealed the first bytes were:
+# 00 00 46 46 F2 BE 09 00 57 45 42 50
+# So the zero the first two bytes trick is being played again, but it's not a "jpg" being obfuscated this time.
+# Searching Wikipedia's list of file signatures at https://en.wikipedia.org/wiki/List_of_file_signatures
+# for files where the 3rd and 4th bytes of the file are "46 46" revealed a number of RIFF file format variants that
+# began "52 49 46 46 ..."
+# Changing the first two bytes to 52 49 resulted in the file successfully being identified by the "file" command as:
+# images/0084extrahigh.webp: RIFF (little-endian) data, Web/P image, VP8 encoding, 2171x3072, Scaling: [none]x[none], YUV color, decoders should clamp
+# and it loaded successfully in the Gewnview image viewer thereafter with a resolution of 2171 x 3072.
+# Edited information copied from the Wikipedia page, for reference:
+# 52 49 46 46 ?? ?? ?? ?? 57 45 42 50 | RIFF????WEBP | Google WebP image file, where ?? ?? ?? ?? is the file size.
+# Extension should be .webp
+# See also: https://developers.google.com/speed/webp/docs/riff_container#webp_file_header
 
 # The pattern for a standard UUID, used to identify storage blobs, magazines and users
 UUID_PATTERN = re.compile("^[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}$")
@@ -223,7 +265,7 @@ def main():
     q = QUALITY_PATTERN.match(quality)
     if not q:
         raise RuntimeError(
-            "--quality= argument does not match any of the expected values: extralow|low|mid|high|original")
+            "--quality= argument does not match any of the expected values: extralow|low|mid|high|extrahigh|original")
 
     bu = UUID_PATTERN.match(m.group('bucket_uuid'))
     if not bu:
@@ -310,7 +352,7 @@ def main():
             for page_num in range(range_from - 1, range_to):
                 page_url = list(url)
                 file_extension = 'jpg'
-                if quality == 'high':
+                if quality == 'high' or quality == 'extrahigh':
                     file_extension = 'bin'
                 page_url[2] = '{}/{}/{:04d}.{}'.format(prefix, quality, page_num, file_extension)
                 page_url = urlunparse(page_url)
@@ -334,9 +376,24 @@ def main():
                                 LOGGER.error('Page {} is not a valid image file. Unable to continue; exiting...'.format(
                                     page_num))
                                 break
+                        # else: the extrahigh quality "bin" format URL
+                        elif quality == 'extrahigh':
+                            # Rewrite the beginning of the file in include the proper RIFF/webp file type code.
+                            riff_header = binascii.unhexlify('5249')
+                            filedata = f.read()[2:]
+                            imgdata = BytesIO(riff_header + filedata)
+                            try:
+                                im = Image.open(imgdata)
+                            except PIL.UnidentifiedImageError as uie:
+                                LOGGER.error('Page {} is not a valid image file. Unable to continue; exiting...'.format(
+                                    page_num))
+                                break
 
                 except HTTPError as e:
-                    if e.code == 404:
+                    if e.code == 404 and quality == 'extrahigh':
+                        LOGGER.info('No image found. Some magazines are not available in \'extrahigh\' quality; try \'high\' quality instead. => stopping')
+                        break
+                    elif e.code == 404:
                         LOGGER.info('No image found => stopping')
                         break
                     raise e
@@ -350,9 +407,14 @@ def main():
                 c.showPage()
                 if save_images:
                     # Save in "human-ranged" format - starting the page count from 1, not 0.
-                    image_name = '{:04d}.jpg'.format(page_num + 1)
-                    image_path = os.path.join(image_subdir_path, image_name)
-                    im.save(image_path)
+                    if quality == 'extrahigh':
+                        image_name = '{:04d}.webp'.format(page_num + 1)
+                        image_path = os.path.join(image_subdir_path, image_name)
+                        im.save(image_path, lossless=True)
+                    else:
+                        image_name = '{:04d}.jpg'.format(page_num + 1)
+                        image_path = os.path.join(image_subdir_path, image_name)
+                        im.save(image_path)
                 sleep(delay)
 
     # else quality == 'original'
