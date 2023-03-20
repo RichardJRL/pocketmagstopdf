@@ -141,3 +141,5 @@ URLs for pocketmags images and User UUIDs can be found by using the HTML 5 reade
 where `<uuid{1,2}>` are strings of letters and numbers with dashes separating them and <num> is some 4-digit number.
 
 The User UUID required for downloading the magazine when '--quality=original' can be found by searching the HTML for the text "userGuid:" and copying the hexadecimal value that follows it without the surrounding single quote characters.
+## Support this Project:
+<a href='https://ko-fi.com/richardjrl' target='_blank'><img height='35' style='border:0px;height:46px;' src='https://az743702.vo.msecnd.net/cdn/kofi3.png?v=0' border='0' alt='Buy Me a Coffee at ko-fi.com' />
