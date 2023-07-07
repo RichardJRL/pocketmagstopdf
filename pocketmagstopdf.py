@@ -366,7 +366,7 @@ def main():
                             im = Image.open(f)
                         # else: the high quality "bin" format URL
                         elif quality == 'high':
-                            # Rewrite the beginning of the file in include the proper JPEG file type code.
+                            # Rewrite the beginning of the file to include the proper JPEG file type code.
                             jpg_header = binascii.unhexlify('FFD8')
                             filedata = f.read()[2:]
                             imgdata = BytesIO(jpg_header + filedata)
@@ -378,7 +378,7 @@ def main():
                                 break
                         # else: the extrahigh quality "bin" format URL
                         elif quality == 'extrahigh':
-                            # Rewrite the beginning of the file in include the proper RIFF/webp file type code.
+                            # Rewrite the beginning of the file to include the proper RIFF/webp file type code.
                             riff_header = binascii.unhexlify('5249')
                             filedata = f.read()[2:]
                             imgdata = BytesIO(riff_header + filedata)
